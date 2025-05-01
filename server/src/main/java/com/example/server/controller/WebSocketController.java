@@ -1,3 +1,4 @@
+/*
 package com.example.server.controller;
 
 import com.example.server.model.Operation;
@@ -41,3 +42,4 @@ public class WebSocketController {
     }
 
 }
+*/

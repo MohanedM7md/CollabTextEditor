@@ -1,6 +1,6 @@
+/*
 package com.example.server.service;
 
-import com.example.server.CRDT.CRDTManager;
 import com.example.server.model.Operation;
 import org.springframework.stereotype.Service;
 
@@ -31,3 +31,4 @@ public class CRDTService {
         }
     }
 }
+*/
