@@ -1,4 +1,7 @@
-package com.example.server.CRDT;
+package com.example.server.CRDT.operations;
+
+import com.example.server.CRDT.CRDTDocument;
+import com.example.server.CRDT.CharItem;
 
 public class UndeleteOperation implements Operation {
     private final CharItem item;

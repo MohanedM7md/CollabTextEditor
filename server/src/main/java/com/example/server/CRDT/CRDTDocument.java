@@ -1,33 +1,65 @@
 package com.example.server.CRDT;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.TreeMap;
-import java.util.Comparator;
+import com.example.server.CRDT.operations.*;
+import com.example.server.model.CursorPosition;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class CRDTDocument {
-    public final TreeMap<CharItem, Void> items;
+    private final TreeMap<CharItem, Void> items;
     private final List<Operation> operationHistory;
     private int historyPointer;
+    private final String documentId;
     private final String localUserId;
+    private final Map<String, CursorPosition> cursors;
+    private final Set<String> activeUsers;
+    private final Set<String> editors;
+    private final Set<String> viewers;
 
-    public CRDTDocument(String userId) {
+
+    public CRDTDocument(String documentId, String userId) {
+        this.documentId = documentId;
         this.localUserId = userId;
         this.items = new TreeMap<>(new CharItemComparator());
         this.operationHistory = new ArrayList<>();
         this.historyPointer = -1;
+        this.cursors = new ConcurrentHashMap<>();
+        this.activeUsers = ConcurrentHashMap.newKeySet();
+        this.editors = ConcurrentHashMap.newKeySet();
+        this.viewers = ConcurrentHashMap.newKeySet();
+        this.activeUsers.add(userId);
+        this.editors.add(userId);
     }
 
     // Document modification methods
-    public void insert(char value, int position) {
+    public synchronized void insert(char value, int position) throws IllegalStateException {
+        if (position < 0 || position > items.size()) {
+            throw new IndexOutOfBoundsException("Invalid insert position");
+        }
+        if (!editors.contains(localUserId)) {
+            throw new IllegalStateException("User doesn't have edit permissions");
+        }
         CharItem newItem = createItemAtPosition(value, position);
         applyOperation(new InsertOperation(newItem));
     }
 
-    public void delete(int position) {
+    public synchronized void delete(int position) throws IllegalStateException {
+        if (!editors.contains(localUserId)) {
+            throw new IllegalStateException("User doesn't have edit permissions");
+        }
         if (position < 0 || position >= items.size()) return;
         CharItem item = getItemAtPosition(position);
         applyOperation(new DeleteOperation(item));
+    }
+    public synchronized void addComment(int startPos, int endPos, String comment) {
+        List<CharItem> affectedItems = getItemsInRange(startPos, endPos);
+        applyOperation(new CommentOperation(affectedItems, comment));
+    }
+
+    public synchronized void addHighlight(int startPos, int endPos, String color) {
+        List<CharItem> affectedItems = getItemsInRange(startPos, endPos);
+        applyOperation(new HighlightOperation(affectedItems, color));
     }
 
     // Methods to safely access document state
@@ -51,36 +83,52 @@ public class CRDTDocument {
     }
 
     // Operation application (package-private for operations)
-    void applyInsert(CharItem item) {
+    public  void applyInsert(CharItem item) {
         items.put(item, null);
     }
 
-    void applyDelete(CharItem item) {
+    public  void applyDelete(CharItem item) {
         CharItem existing = items.floorKey(item);
         if (existing != null && existing.equals(item)) {
             existing.setDeleted(true);
         }
     }
 
-    void applyUndelete(CharItem item) {
+    public void applyUndelete(CharItem item) {
         CharItem existing = items.floorKey(item);
         if (existing != null && existing.equals(item)) {
             existing.setDeleted(false);
         }
     }
 
-    void applyComment(List<CharItem> items, String comment) {
+    public void applyComment(List<CharItem> items, String comment) {
         for (CharItem item : items) {
             item.setComment(comment);
         }
     }
 
-    void applyHighlight(List<CharItem> items, String color) {
+    public void applyHighlight(List<CharItem> items, String color) {
         for (CharItem item : items) {
             item.setColor(color);
         }
     }
+    // User management methods
+    public void addEditor(String userId) {
+        editors.add(userId);
+        viewers.remove(userId);
+    }
 
+    public void addViewer(String userId) {
+        viewers.add(userId);
+        editors.remove(userId);
+    }
+
+    public void removeUser(String userId) {
+        editors.remove(userId);
+        viewers.remove(userId);
+        activeUsers.remove(userId);
+        cursors.remove(userId);
+    }
     // Private helper methods
     private CharItem createItemAtPosition(char value, int position) {
         List<CharItem> itemList = new ArrayList<>(items.keySet());
@@ -92,11 +140,11 @@ public class CRDTDocument {
         }
 
         if (position <= 0) {
-            return createItemBefore(value, itemList.get(0));
+            return createItemBefore(value, itemList.getFirst());
         }
 
         if (position >= itemList.size()) {
-            return createItemAfter(value, itemList.get(itemList.size()-1));
+            return createItemAfter(value, itemList.getLast());
         }
 
         return createItemBetween(value, itemList.get(position-1), itemList.get(position));
@@ -135,7 +183,7 @@ public class CRDTDocument {
         }
     }
 
-    private void applyOperation(Operation op) {
+    public void applyOperation(Operation op) {
         op.apply(this);
         if (historyPointer < operationHistory.size() - 1) {
             operationHistory.subList(historyPointer + 1, operationHistory.size()).clear();
@@ -177,6 +225,11 @@ public class CRDTDocument {
         op.apply(this);
         System.out.println("Redo: " + op.getClass().getSimpleName());
     }
+
+    public String getActiveUsers() {
+        return activeUsers.toString();
+    }
+
     private static class CharItemComparator implements Comparator<CharItem> {
         @Override
         public int compare(CharItem a, CharItem b) {
@@ -193,5 +246,27 @@ public class CRDTDocument {
             return Long.compare(a.getTimestamp(), b.getTimestamp());
         }
     }
+
+    // Cursor management
+    public void updateCursor(String userId, int position, String color) {
+        if (!activeUsers.contains(userId)) return;
+        cursors.put(userId, new CursorPosition(userId, position, color));
+    }
+
+    public Collection<CursorPosition> getAllCursors() {
+        return cursors.values();
+    }
+
+    // User presence
+    public void userConnected(String userId) {
+        activeUsers.add(userId);
+    }
+
+    public void userDisconnected(String userId) {
+        activeUsers.remove(userId);
+        cursors.remove(userId);
+    }
+
+
 
 }

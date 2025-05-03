@@ -1,5 +1,5 @@
-package com.example.server.CRDT;
-import java.util.List;
+package com.example.server.CRDT.operations;
+import com.example.server.CRDT.CRDTDocument;
 
 
 public interface Operation {

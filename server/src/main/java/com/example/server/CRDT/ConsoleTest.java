@@ -1,135 +1,69 @@
 package com.example.server.CRDT;
-import java.util.Scanner;
-import java.util.List;
-import java.util.ArrayList;
+
+import com.example.server.model.CursorPosition;
+
+import java.util.Collection;
 
 public class ConsoleTest {
     public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        System.out.println("CRDT Text Editor - Console Test");
+        System.out.println("=== CRDT Document Test ===");
 
-        // Initialize document
-        System.out.print("Enter your user ID: ");
-        String userId = scanner.nextLine();
-        CRDTDocument doc = new CRDTDocument(userId);
+        // Create a new document
+        String docId = "doc1";
+        String userId = "user1";
+        CRDTDocument document = new CRDTDocument(docId, userId);
 
-        // Main loop
-        while (true) {
-            System.out.println("\nCurrent document: " + doc.getText());
-            System.out.println("1. Insert character");
-            System.out.println("2. Delete character");
-            System.out.println("3. Add comment");
-            System.out.println("4. Remove comment");
-            System.out.println("5. Highlight text");
-            System.out.println("6. Remove highlight");
-            System.out.println("7. Undo");
-            System.out.println("8. Redo");
-            System.out.println("9. Show document state");
-            System.out.println("0. Exit");
-            System.out.print("Choose an option: ");
+        // Test 1: Basic insertions
+        System.out.println("\nTest 1: Inserting characters...");
+        document.insert('H', 0);
+        document.insert('e', 1);
+        document.insert('l', 2);
+        document.insert('l', 3);
+        document.insert('o', 4);
+        System.out.println("Document content: " + document.getText());
 
-            int choice;
-            try {
-                choice = Integer.parseInt(scanner.nextLine());
-            } catch (NumberFormatException e) {
-                System.out.println("Invalid input. Please enter a number.");
-                continue;
-            }
+        // Test 2: Deletion
+        System.out.println("\nTest 2: Deleting 'e'...");
+        document.delete(1);
+        System.out.println("Document content: " + document.getText());
 
-            try {
-                switch (choice) {
-                    case 1: // Insert
-                        System.out.print("Enter position to insert at: ");
-                        int insertPos = Integer.parseInt(scanner.nextLine());
-                        System.out.print("Enter character to insert: ");
-                        char c = scanner.nextLine().charAt(0);
-                        doc.insert(c, insertPos);
-                        break;
+        // Test 3: Undo/Redo
+        System.out.println("\nTest 3: Undo/Redo operations...");
+        System.out.println("Before undo: " + document.getText());
+        document.undo();
+        System.out.println("After undo: " + document.getText());
+        document.redo();
+        System.out.println("After redo: " + document.getText());
 
-                    case 2: // Delete
-                        System.out.print("Enter position to delete: ");
-                        int deletePos = Integer.parseInt(scanner.nextLine());
-                        doc.delete(deletePos);
-                        break;
-
-                    case 3: // Add comment
-                        System.out.print("Enter start position: ");
-                        int commentStart = Integer.parseInt(scanner.nextLine());
-                        System.out.print("Enter end position: ");
-                        int commentEnd = Integer.parseInt(scanner.nextLine());
-                        System.out.print("Enter comment text: ");
-                        String comment = scanner.nextLine();
-
-                        break;
-
-                    case 4: // Remove comment
-                        System.out.print("Enter start position: ");
-                        int uncommentStart = Integer.parseInt(scanner.nextLine());
-                        System.out.print("Enter end position: ");
-                        int uncommentEnd = Integer.parseInt(scanner.nextLine());
-                        doc.removeComment(uncommentStart, uncommentEnd);
-                        break;
-
-                    case 5: // Highlight
-                        System.out.print("Enter start position: ");
-                        int highlightStart = Integer.parseInt(scanner.nextLine());
-                        System.out.print("Enter end position: ");
-                        int highlightEnd = Integer.parseInt(scanner.nextLine());
-                        System.out.print("Enter color (e.g., 'yellow'): ");
-                        String color = scanner.nextLine();
-
-                        break;
-
-                    case 6: // Remove highlight
-                        System.out.print("Enter start position: ");
-                        int unhighlightStart = Integer.parseInt(scanner.nextLine());
-                        System.out.print("Enter end position: ");
-                        int unhighlightEnd = Integer.parseInt(scanner.nextLine());
-                        doc.removeHighlight(unhighlightStart, unhighlightEnd);
-                        break;
-
-                    case 7: // Undo
-                        doc.undo();
-                        System.out.println("Undo performed");
-                        break;
-
-                    case 8: // Redo
-                        doc.redo();
-                        System.out.println("Redo performed");
-                        break;
-
-                    case 9: // Show document state
-                        showDocumentState(doc);
-                        break;
-
-                    case 0: // Exit
-                        System.out.println("Exiting...");
-                        return;
-
-                    default:
-                        System.out.println("Invalid choice. Try again.");
-                }
-            } catch (Exception e) {
-                System.out.println("Error: " + e.getMessage());
-                e.printStackTrace();
-            }
+        // Test 4: Cursor tracking
+        System.out.println("\nTest 4: Cursor tracking...");
+        document.updateCursor(userId, 2, "red");
+        System.out.println("Current cursors:");
+        Collection<CursorPosition> cursors = document.getAllCursors();
+        for (CursorPosition cursor : cursors) {
+            System.out.println("- User " + cursor.getUserId() +
+                    " at position " + cursor.getPosition() +
+                    " (color: " + cursor.getColor() + ")");
         }
-    }
 
-    private static void showDocumentState(CRDTDocument doc) {
-        System.out.println("\n=== Document State ===");
-        System.out.println("Text: " + doc.getText());
+        // Test 5: Adding a comment
+        System.out.println("\nTest 5: Adding a comment...");
+        document.addComment(0, 3, "Greeting");
+        System.out.println("Document with comment: " + document.getText());
 
-        List<CharItem> items = new ArrayList<>(doc.items.keySet());
-        for (int i = 0; i < items.size(); i++) {
-            CharItem item = items.get(i);
-            System.out.printf("%3d: %s %s %s %s%n",
-                    i,
-                    item.isDeleted() ? "[DEL]" : "     ",
-                    item.getValue(),
-                    item.getComment() != null ? "Comment: " + item.getComment() : "",
-                    item.getColor() != null ? "Color: " + item.getColor() : "");
+        // Test 6: Adding another user
+        System.out.println("\nTest 6: Adding another user...");
+        String user2 = "user2";
+        document.addEditor(user2);
+        document.userConnected(user2);
+        document.updateCursor(user2, 4, "blue");
+        System.out.println("Active users: " + document.getActiveUsers());
+        System.out.println("Current cursors:");
+        for (CursorPosition cursor : document.getAllCursors()) {
+            System.out.println("- User " + cursor.getUserId() +
+                    " at position " + cursor.getPosition());
         }
-        System.out.println("=====================");
+
+        System.out.println("\n=== Test Complete ===");
     }
 }

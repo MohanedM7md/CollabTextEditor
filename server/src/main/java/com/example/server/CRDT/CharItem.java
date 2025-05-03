@@ -17,6 +17,7 @@ public class CharItem {
     private List<Integer> path;      // Tree path for positioning
 
     public CharItem(char value, String userId) {
+
         this.value = value;
         this.userId = userId;
         this.timestamp = System.nanoTime();
@@ -35,6 +36,7 @@ public class CharItem {
         this.id = userId + "-" + timestamp;
         this.path = new ArrayList<>(path);
     }
+
 
     @Override
     public boolean equals(Object o) {
