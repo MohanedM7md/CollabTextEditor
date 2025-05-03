@@ -1,5 +1,6 @@
 package com.example.server.controller;
 import com.example.server.dto.requests.*;
+import com.example.server.dto.responses.DocumentStateResponse;
 import com.example.server.service.CollaborationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -24,15 +25,15 @@ public class CollaborationController {
     @MessageMapping("/document/{docId}/insert")
     public void handleInsert(@DestinationVariable String docId,
                              @Payload InsertRequest request) {
-        collaborationService.handleInsert(docId, request);
-
+        DocumentStateResponse response =   collaborationService.handleInsert(docId, request);
+        messagingTemplate.convertAndSend("/topic/document/" + docId + "/state", response);
     }
 
     @MessageMapping("/document/{docId}/delete")
     public void handleDelete(@DestinationVariable String docId,
                              @Payload DeleteRequest request) {
-        collaborationService.handleDelete(docId, request);
-
+        DocumentStateResponse response =  collaborationService.handleDelete(docId, request);
+        messagingTemplate.convertAndSend("/topic/document/" + docId + "/state", response);
     }
 
     @MessageMapping("/document/{docId}/cursor")
@@ -45,14 +46,16 @@ public class CollaborationController {
     @MessageMapping("/document/{docId}/undo")
     public void handleUndo(@DestinationVariable String docId,
                            @Payload UndoRequest request) {
-        collaborationService.handleUndo(docId, request.getUserId());
+        DocumentStateResponse response = collaborationService.handleUndo(docId, request);
+        messagingTemplate.convertAndSend("/topic/document/" + docId + "/state", response);
 
     }
 
     @MessageMapping("/document/{docId}/redo")
     public void handleRedo(@DestinationVariable String docId,
                            @Payload UndoRequest request) {
-        collaborationService.handleRedo(docId, request.getUserId());
+        DocumentStateResponse response = collaborationService.handleRedo(docId, request);
+        messagingTemplate.convertAndSend("/topic/document/" + docId + "/state", response);
 
     }
 

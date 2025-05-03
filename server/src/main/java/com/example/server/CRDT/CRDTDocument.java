@@ -1,6 +1,7 @@
 package com.example.server.CRDT;
 
 import com.example.server.CRDT.operations.*;
+import com.example.server.dto.responses.DocumentStateResponse;
 import com.example.server.model.CursorPosition;
 
 import java.util.*;
@@ -299,6 +300,15 @@ public class CRDTDocument {
             }
         }
         return -1; // Item not found
+    }
+
+    public DocumentStateResponse getCurrentState(String operationType, String triggeringUser) {
+        return new DocumentStateResponse(
+                getText(),
+                getAllCursors(),
+                operationType,
+                triggeringUser
+        );
     }
 
 }
