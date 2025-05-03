@@ -12,7 +12,6 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
-
 @Controller
 public class CollaborationController {
 
@@ -21,7 +20,7 @@ public class CollaborationController {
 
     @Autowired
     public CollaborationController(CollaborationService collaborationService,
-                                   SimpMessagingTemplate messagingTemplate) {
+            SimpMessagingTemplate messagingTemplate) {
         this.collaborationService = collaborationService;
         this.messagingTemplate = messagingTemplate;
     }
@@ -39,8 +38,6 @@ public class CollaborationController {
         messagingTemplate.convertAndSend("/topic/document/" + docId + "/updates", applied);
     }
 
-
-
     @MessageMapping("/document/{docId}/cursor")
     public void handleCursorUpdate(@DestinationVariable String docId, @Payload CursorUpdateRequest request) {
         System.out.println("Received cursor update for doc: " + docId);
@@ -54,8 +51,7 @@ public class CollaborationController {
                 docId,
                 request.getUserId(),
                 request.getPosition(),
-                request.getColor()
-        );
+                request.getColor());
 
         if (updated) {
             messagingTemplate.convertAndSend("/topic/document/" + docId + "/cursors", request);
