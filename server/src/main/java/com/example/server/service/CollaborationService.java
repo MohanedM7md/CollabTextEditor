@@ -16,36 +16,47 @@ public class CollaborationService {
         this.sessionRegistry = sessionRegistry;
     }
 
-    public Operation applyOperation(String docId, String userId, Operation operation) {
-        Optional<Document> optionalDoc = documentService.findById(docId);
-        if (optionalDoc.isEmpty()) {
-            System.out.println("Document not found: " + docId);
-            return operation;
-        }
-
-        Document doc = optionalDoc.get();
-        if (!doc.canEdit(userId)) {
-            System.out.println("User " + userId + " not authorized to edit document " + docId);
-            return operation;
-        }
-
-        doc.getCrdtDocument().applyOperation(operation);
-        doc.updateTimestamp();
-        documentService.save(doc);
-        System.out.println("Operation applied to document " + docId);
-        return operation;
+    public void handleInsert(String docId, InsertRequest request) {
+        documentService.findById(docId).ifPresent(document -> {
+            CRDTDocument crdtDoc = document.getCrdtDocument();
+            try {
+                crdtDoc.insert(request.getValue(), request.getPosition(), request.getUserId());
+            } catch (Exception e) {
+                // Handle error
+            }
+        });
     }
 
-    public boolean updateCursor(String docId, String userId, int position, String color) {
-        Optional<Document> optionalDoc = documentService.findById(docId);
-        if (optionalDoc.isEmpty()) {
-            System.out.println("Document not found: " + docId);
-            return false;
-        }
+    public void handleDelete(String docId, DeleteRequest request) {
+        documentService.findById(docId).ifPresent(document -> {
+            CRDTDocument crdtDoc = document.getCrdtDocument();
+            try {
+                crdtDoc.delete(request.getPosition(), request.getUserId());
+            } catch (Exception e) {
+                // Handle error
+            }
+        });
+    }
 
-        Document doc = optionalDoc.get();
-        doc.getCrdtDocument().updateCursor(userId, position, color);
-        System.out.println("Cursor updated for user " + userId + " in document " + docId);
-        return true;
+    public void handleCursorUpdate(String docId, CursorUpdateRequest request) {
+        documentService.findById(docId).ifPresent(document -> {
+            document.getCrdtDocument().updateCursor(
+                    request.getUserId(),
+                    request.getPosition(),
+                    request.getColor()
+            );
+        });
+    }
+
+    public void handleUndo(String docId, String userId) {
+        documentService.findById(docId).ifPresent(document -> {
+            document.getCrdtDocument().undo(userId);
+        });
+    }
+
+    public void handleRedo(String docId, String userId) {
+        documentService.findById(docId).ifPresent(document -> {
+            document.getCrdtDocument().redo(userId);
+        });
     }
 }

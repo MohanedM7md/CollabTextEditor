@@ -25,37 +25,51 @@ public class CollaborationController {
         this.messagingTemplate = messagingTemplate;
     }
 
-    @MessageMapping("/document/{docId}/operation")
-    public void handleOperation(@DestinationVariable String docId, @Payload OperationRequest request) {
-        System.out.println("Received operation for doc: " + docId);
-        Operation op = request.getOperation();
-        if (op == null || request.getUserId() == null) {
-            System.out.println("Invalid operation payload");
-            return;
-        }
+    @MessageMapping("/document/{docId}/insert")
+    public void handleInsert(@DestinationVariable String docId,
+                             @Payload InsertRequest request) {
+        collaborationService.handleInsert(docId, request);
+        broadcastDocumentState(docId);
+    }
 
-        Operation applied = collaborationService.applyOperation(docId, request.getUserId(), op);
-        messagingTemplate.convertAndSend("/topic/document/" + docId + "/updates", applied);
+    @MessageMapping("/document/{docId}/delete")
+    public void handleDelete(@DestinationVariable String docId,
+                             @Payload DeleteRequest request) {
+        collaborationService.handleDelete(docId, request);
+        broadcastDocumentState(docId);
     }
 
     @MessageMapping("/document/{docId}/cursor")
-    public void handleCursorUpdate(@DestinationVariable String docId, @Payload CursorUpdateRequest request) {
-        System.out.println("Received cursor update for doc: " + docId);
+    public void handleCursorUpdate(@DestinationVariable String docId,
+                                   @Payload CursorUpdateRequest request) {
+        collaborationService.handleCursorUpdate(docId, request);
+        messagingTemplate.convertAndSend("/topic/document/" + docId + "/cursors", request);
+    }
 
-        if (request.getUserId() == null) {
-            System.out.println("No userId in cursor update");
-            return;
-        }
+    @MessageMapping("/document/{docId}/undo")
+    public void handleUndo(@DestinationVariable String docId,
+                           @Payload UndoRedoRequest request) {
+        collaborationService.handleUndo(docId, request.getUserId());
+        broadcastDocumentState(docId);
+    }
 
-        boolean updated = collaborationService.updateCursor(
-                docId,
-                request.getUserId(),
-                request.getPosition(),
-                request.getColor());
-
-        if (updated) {
-            messagingTemplate.convertAndSend("/topic/document/" + docId + "/cursors", request);
-        }
+    @MessageMapping("/document/{docId}/redo")
+    public void handleRedo(@DestinationVariable String docId,
+                           @Payload UndoRedoRequest request) {
+        collaborationService.handleRedo(docId, request.getUserId());
+        broadcastDocumentState(docId);
+    }
+    private void broadcastDocumentState(String docId) {
+        documentService.findById(docId).ifPresent(document -> {
+            messagingTemplate.convertAndSend(
+                    "/topic/document/" + docId + "/state",
+                    new DocumentStateResponse(
+                            document.getText(),
+                            document.getAllCursors(),
+                            document.getActiveUsers()
+                    )
+            );
+        });
     }
 
     @MessageMapping("/document/connect")

@@ -5,9 +5,10 @@ import com.example.server.CRDT.CharItem;
 
 public class UndeleteOperation implements Operation {
     private final CharItem item;
-
-    public UndeleteOperation(CharItem item) {
+    private final String userId;
+    public UndeleteOperation(CharItem item, String userId) {
         this.item = item;
+        this.userId = userId;
     }
 
     @Override
@@ -17,6 +18,11 @@ public class UndeleteOperation implements Operation {
 
     @Override
     public Operation getInverse() {
-        return new DeleteOperation(item);
+        return new DeleteOperation(item, userId);
+    }
+
+    @Override
+    public String getUserId() {
+        return userId;
     }
 }

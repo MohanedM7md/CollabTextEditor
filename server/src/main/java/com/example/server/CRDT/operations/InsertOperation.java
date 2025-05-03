@@ -5,9 +5,10 @@ import com.example.server.CRDT.CharItem;
 
 public class InsertOperation implements Operation {
     private final CharItem item;
-
-    public InsertOperation(CharItem item) {
+    private final String userId;
+    public InsertOperation(CharItem item, String userId) {
         this.item = item;
+        this.userId = userId;
     }
 
     @Override
@@ -17,6 +18,11 @@ public class InsertOperation implements Operation {
 
     @Override
     public Operation getInverse() {
-        return new DeleteOperation(item);
+        return new DeleteOperation(item, userId);
+    }
+
+    @Override
+    public String getUserId() {
+        return userId;
     }
 }
