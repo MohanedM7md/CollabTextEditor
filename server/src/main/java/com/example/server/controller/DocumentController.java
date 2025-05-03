@@ -15,7 +15,8 @@ public class DocumentController {
         this.documentService = documentService;
     }
 
-    @PostMapping
+
+    @PostMapping("/create")
     public Document createDocument(@RequestParam String userId) {
         return documentService.createDocument(userId);
     }
