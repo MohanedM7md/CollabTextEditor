@@ -1,4 +1,5 @@
 package com.example.server.network;
+
 import com.example.server.CRDT.operations.Operation;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,7 +24,7 @@ public class OperationSerializer {
                 new NamedType(com.example.server.CRDT.operations.DeleteOperation.class, "DELETE"),
                 new NamedType(com.example.server.CRDT.operations.CommentOperation.class, "COMMENT"),
                 new NamedType(com.example.server.CRDT.operations.HighlightOperation.class, "HIGHLIGHT")
-                // Add other operation types as needed
+        // Add other operation types as needed
         );
     }
 
