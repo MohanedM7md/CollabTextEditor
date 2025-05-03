@@ -1,5 +1,4 @@
 package com.example.server.service;
-
 import com.example.server.CRDT.operations.Operation;
 import com.example.server.model.Document;
 import com.example.server.model.UserSession;
