@@ -28,6 +28,7 @@ public class CRDTDocument {
         this.editors.add(userId);
     }
 
+
     // Document modification methods
     public synchronized void insert(char value, int position,String userId) throws IllegalStateException {
         if (position < 0 || position > items.size()) {
@@ -287,6 +288,17 @@ public class CRDTDocument {
         cursors.remove(userId);
     }
 
-
+    public int getClientPosition(CharItem item) {
+        int pos = 0;
+        for (CharItem current : items.keySet()) {
+            if (current.equals(item)) {
+                return current.isDeleted() ? -1 : pos; // Return -1 for deleted items
+            }
+            if (!current.isDeleted()) {
+                pos++; // Only count non-deleted items for client positions
+            }
+        }
+        return -1; // Item not found
+    }
 
 }

@@ -1,5 +1,9 @@
 package com.example.server.service;
+import com.example.server.CRDT.CRDTDocument;
 import com.example.server.CRDT.operations.Operation;
+import com.example.server.dto.requests.CursorUpdateRequest;
+import com.example.server.dto.requests.DeleteRequest;
+import com.example.server.dto.requests.InsertRequest;
 import com.example.server.model.Document;
 import org.springframework.stereotype.Service;
 

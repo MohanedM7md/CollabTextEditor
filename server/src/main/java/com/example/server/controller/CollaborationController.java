@@ -1,9 +1,5 @@
 package com.example.server.controller;
-
-import com.example.server.CRDT.operations.Operation;
-import com.example.server.dto.requests.ConnectRequest;
-import com.example.server.dto.requests.CursorUpdateRequest;
-import com.example.server.dto.requests.OperationRequest;
+import com.example.server.dto.requests.*;
 import com.example.server.service.CollaborationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -29,14 +25,14 @@ public class CollaborationController {
     public void handleInsert(@DestinationVariable String docId,
                              @Payload InsertRequest request) {
         collaborationService.handleInsert(docId, request);
-        broadcastDocumentState(docId);
+
     }
 
     @MessageMapping("/document/{docId}/delete")
     public void handleDelete(@DestinationVariable String docId,
                              @Payload DeleteRequest request) {
         collaborationService.handleDelete(docId, request);
-        broadcastDocumentState(docId);
+
     }
 
     @MessageMapping("/document/{docId}/cursor")
@@ -48,28 +44,16 @@ public class CollaborationController {
 
     @MessageMapping("/document/{docId}/undo")
     public void handleUndo(@DestinationVariable String docId,
-                           @Payload UndoRedoRequest request) {
+                           @Payload UndoRequest request) {
         collaborationService.handleUndo(docId, request.getUserId());
-        broadcastDocumentState(docId);
+
     }
 
     @MessageMapping("/document/{docId}/redo")
     public void handleRedo(@DestinationVariable String docId,
-                           @Payload UndoRedoRequest request) {
+                           @Payload UndoRequest request) {
         collaborationService.handleRedo(docId, request.getUserId());
-        broadcastDocumentState(docId);
-    }
-    private void broadcastDocumentState(String docId) {
-        documentService.findById(docId).ifPresent(document -> {
-            messagingTemplate.convertAndSend(
-                    "/topic/document/" + docId + "/state",
-                    new DocumentStateResponse(
-                            document.getText(),
-                            document.getAllCursors(),
-                            document.getActiveUsers()
-                    )
-            );
-        });
+
     }
 
     @MessageMapping("/document/connect")
