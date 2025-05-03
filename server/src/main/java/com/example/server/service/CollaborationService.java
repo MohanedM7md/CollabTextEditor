@@ -4,6 +4,7 @@ import com.example.server.dto.requests.CursorUpdateRequest;
 import com.example.server.dto.requests.DeleteRequest;
 import com.example.server.dto.requests.InsertRequest;
 import com.example.server.dto.requests.UndoRequest;
+import com.example.server.dto.responses.CursorResponse;
 import com.example.server.dto.responses.DocumentStateResponse;
 import org.springframework.stereotype.Service;
 
@@ -34,14 +35,21 @@ public class CollaborationService {
         }).orElseThrow(() -> new RuntimeException("Document not found"));
     }
 
-    public void handleCursorUpdate(String docId, CursorUpdateRequest request) {
-        documentService.findById(docId).ifPresent(document -> {
+    public CursorResponse handleCursorUpdate(String docId, CursorUpdateRequest request) {
+        return documentService.findById(docId).map(document -> {
+
             document.getCrdtDocument().updateCursor(
                     request.getUserId(),
                     request.getPosition(),
                     request.getColor()
             );
-        });
+            return new CursorResponse(
+                    request.getUserId(),
+                    request.getPosition(),
+                    request.getColor(),
+                    docId
+            );
+        }).orElseThrow(() -> new RuntimeException("Document not found"));
     }
 
     public DocumentStateResponse handleUndo(String docId, UndoRequest request) {
@@ -49,7 +57,7 @@ public class CollaborationService {
             CRDTDocument crdt = document.getCrdtDocument();
             crdt.undo(request.getUserId());
             return crdt.getCurrentState("UNDO", request.getUserId());
-        }).orElseThrow(() -> new RuntimeException("Document not found"))
+        }).orElseThrow(() -> new RuntimeException("Document not found"));
     }
 
     public DocumentStateResponse handleRedo(String docId, UndoRequest request) {
@@ -57,6 +65,6 @@ public class CollaborationService {
             CRDTDocument crdt = document.getCrdtDocument();
             crdt.redo(request.getUserId());
             return crdt.getCurrentState("UNDO", request.getUserId());
-        }).orElseThrow(() -> new RuntimeException("Document not found"))
+        }).orElseThrow(() -> new RuntimeException("Document not found"));
     }
 }
