@@ -1,5 +1,6 @@
 package com.example.server.controller;
 import com.example.server.dto.requests.*;
+import com.example.server.dto.responses.CursorResponse;
 import com.example.server.dto.responses.DocumentStateResponse;
 import com.example.server.service.CollaborationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,8 +40,8 @@ public class CollaborationController {
     @MessageMapping("/document/{docId}/cursor")
     public void handleCursorUpdate(@DestinationVariable String docId,
                                    @Payload CursorUpdateRequest request) {
-        collaborationService.handleCursorUpdate(docId, request);
-        messagingTemplate.convertAndSend("/topic/document/" + docId + "/cursors", request);
+        CursorResponse response =  collaborationService.handleCursorUpdate(docId, request);
+        messagingTemplate.convertAndSend("/topic/document/" + docId + "/cursors", response);
     }
 
     @MessageMapping("/document/{docId}/undo")

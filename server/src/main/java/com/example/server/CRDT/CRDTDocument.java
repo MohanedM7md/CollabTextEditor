@@ -301,7 +301,9 @@ public class CRDTDocument {
         }
         return -1; // Item not found
     }
-
+    public boolean canEdit(String userId) {
+        return editors.contains(userId);
+    }
     public DocumentStateResponse getCurrentState(String operationType, String triggeringUser) {
         return new DocumentStateResponse(
                 getText(),

@@ -1,0 +1,52 @@
+.root {
+    -fx-font-family: 'Segoe UI', Arial;
+    -fx-base: #f0f0f0;
+}
+
+.text-area {
+    -fx-font-family: 'Consolas', monospace;
+    -fx-font-size: 14px;
+    -fx-padding: 10px;
+    -fx-background-insets: 0;
+    -fx-background-color: white;
+    -fx-border-color: #ccc;
+    -fx-border-radius: 4px;
+}
+
+.button {
+    -fx-background-radius: 4px;
+    -fx-padding: 6px 12px;
+    -fx-cursor: hand;
+    -fx-background-color: #e0e0e0;
+    -fx-border-color: #ccc;
+    -fx-border-width: 1px;
+}
+
+.button:hover {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 5, 0.5, 0, 1);
+    -fx-background-color: #d0d0d0;
+}
+
+.status-label {
+    -fx-font-style: italic;
+    -fx-text-fill: #666;
+}
+
+.session-bar {
+    -fx-background-color: #e0e0e0;
+    -fx-padding: 10px;
+    -fx-spacing: 10px;
+    -fx-border-color: #ccc;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.radio-button {
+    -fx-padding: 0 5px 0 0;
+}
+
+.text-field {
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+    -fx-border-color: #ccc;
+    -fx-padding: 4px;
+}

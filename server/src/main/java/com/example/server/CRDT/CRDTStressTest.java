@@ -135,15 +135,6 @@ public class CRDTStressTest {
         System.out.println("TEXT: \"" + document.getText() + "\"");
         System.out.println("LENGTH: " + document.getText().length());
 
-        // Show deleted characters (for debugging)
-        if (!document.getText().isEmpty()) {
-            System.out.print("STRUCTURE: [");
-            for (CharItem item : document.getItems().keySet()) {
-                System.out.print(item.isDeleted() ?
-                        "[" + item.getValue() + "]" :
-                        item.getValue());
-            }
-            System.out.println("]");
-        }
+
     }
 }

@@ -18,8 +18,6 @@ public class Document {
     private LocalDateTime updatedAt;
     private String editorCode;
     private String viewerCode;
-    private Set<String> editorIds = new HashSet<>();
-    private Set<String> viewerIds = new HashSet<>();
     private CRDTDocument crdtDocument;
     private DocumentStatus status = DocumentStatus.ACTIVE;
 
