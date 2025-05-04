@@ -1,6 +1,6 @@
 package com.editor.collabtexteditor;
 
-import com.editor.collabtexteditor.controllers.CollabSessionController;
+import com.editor.collabtexteditor.controllers.DocumentsOverviewController;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
@@ -10,15 +10,15 @@ import java.util.Objects;
 public class CollabTextEditorApp extends Application {
     @Override
     public void start(Stage primaryStage) {
-        CollabSessionController controller = new CollabSessionController();
-        Scene scene = new Scene(controller.getRoot(), 800, 600);
+        DocumentsOverviewController overviewController = new DocumentsOverviewController();
+        Scene scene = new Scene(overviewController.getRoot(), 800, 600);
 
-        // Try to load CSS, but don't fail if not found
+        // Load CSS
         try {
             scene.getStylesheets().add(
-                    Objects.requireNonNull(getClass().getResource("styles.main.css")).toExternalForm()
+                    Objects.requireNonNull(getClass().getResource("main.css")).toExternalForm()
             );
-        } catch (NullPointerException e) {
+        } catch (Exception e) {
             System.err.println("Warning: CSS file not found. Using default styling.");
         }
 
