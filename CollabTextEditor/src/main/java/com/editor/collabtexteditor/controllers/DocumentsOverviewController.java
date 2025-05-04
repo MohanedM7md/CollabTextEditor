@@ -190,7 +190,7 @@ public class DocumentsOverviewController {
             String code = parts[1];
 
             // Validate code and open document
-            openDocument(docName, code, mode);
+            joinDocumentOnServer(docName, code, mode);
         });
     }
 
@@ -200,11 +200,39 @@ public class DocumentsOverviewController {
 
         // For demo, we'll just create a local document
         String newDocId = "DOC-" + UUID.randomUUID().toString().substring(0, 5);
-        openDocument("New Document", newDocId, "editor");
+        joinDocumentOnServer("New Document", newDocId, "editor");
     }
 
-    private void openDocument(String docName, String docId, String mode) {
+    private void joinDocumentOnServer(String name, String mode, String code) {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8080/api/documents/by-share-code/" + code))
+                .GET()
+                .build();
 
+
+        client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(HttpResponse::body)
+                .thenAccept(responseBody -> {
+                    System.out.println("Join response: " + responseBody);
+                    Platform.runLater(() -> {
+                        try {
+                            ObjectMapper mapper = new ObjectMapper();
+                            JsonNode json = mapper.readTree(responseBody);
+                            String documentId = json.get("id").asText();
+                            openDocument(documentId, mode);
+                        } catch (Exception e) {
+                            handleError(e);
+                        }
+                    });
+                })
+                .exceptionally(e -> {
+                    handleError(e);
+                    return null;
+                });
+    }
+
+    private void openDocument(String docId, String mode) {
         CollabSessionController sessionController = new CollabSessionController(docId, generatedUserId, mode);
         root.getScene().setRoot(sessionController.getRoot());
     }
