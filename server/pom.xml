@@ -21,6 +21,7 @@
 	</properties>
 
 	<dependencies>
+
 		<!-- Core Spring Boot for HTTP REST and WebSocket -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -45,7 +46,14 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>3.12.0</version> <!-- or latest -->
+		</dependency>
 	</dependencies>
+
 
 	<build>
 		<plugins>

@@ -15,7 +15,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
+
+import static com.editor.collabtexteditor.Configs.API_URL;
 
 public class DocumentsOverviewController {
     private final BorderPane root = new BorderPane();
@@ -58,7 +62,7 @@ public class DocumentsOverviewController {
     private void fetchDocuments() {
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8080/api/documents/titles"))
+                .uri(URI.create(API_URL+"documents/titles"))
                 .GET()
                 .build();
 
@@ -153,22 +157,11 @@ public class DocumentsOverviewController {
         dialog.setTitle("Join Document");
         dialog.setHeaderText("Join " + docName);
 
-        // Create radio buttons for join options
-        ToggleGroup group = new ToggleGroup();
-        RadioButton editorBtn = new RadioButton("Join as Editor");
-        RadioButton viewerBtn = new RadioButton("Join as Viewer");
-        editorBtn.setToggleGroup(group);
-        viewerBtn.setToggleGroup(group);
-        editorBtn.setSelected(true);
-
         // Code input field
         TextField codeField = new TextField();
         codeField.setPromptText("Enter access code");
 
         VBox content = new VBox(15,
-                new Label("Select your access level:"),
-                editorBtn,
-                viewerBtn,
                 new Label("Enter access code:"),
                 codeField);
         content.setPadding(new Insets(20));
@@ -178,35 +171,97 @@ public class DocumentsOverviewController {
 
         dialog.setResultConverter(buttonType -> {
             if (buttonType == ButtonType.OK) {
-                String mode = editorBtn.isSelected() ? "editor" : "viewer";
-                return mode + ":" + codeField.getText();
+                return codeField.getText();
             }
             return null;
         });
 
-        dialog.showAndWait().ifPresent(result -> {
-            String[] parts = result.split(":");
-            String mode = parts[0];
-            String code = parts[1];
+        dialog.showAndWait().ifPresent(code -> {
+                // Just call the function with name and code
+            joinDocumentOnServer(docName, code);
+        });
+    }
+    private void showCreateDocumentDialog() {
+        Dialog<Map<String, String>> dialog = new Dialog<>();
+        dialog.setTitle("Create New Document");
+        dialog.setHeaderText("Enter document title");
 
-            // Validate code and open document
-            joinDocumentOnServer(docName, code, mode);
+        TextField titleField = new TextField();
+        titleField.setPromptText("Document Title");
+
+        // Auto-generate editor and viewer codes
+        String editorCode = generateRandomCode();
+        String viewerCode = generateRandomCode();
+
+        VBox content = new VBox(10,
+                new Label("Owner of the document: " + generatedUserId),
+                new Label("Editor Code: " + editorCode),
+                new Label("Viewer Code: " + viewerCode),
+                new Label("Title:"), titleField);
+        content.setPadding(new Insets(20));
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        dialog.setResultConverter(button -> {
+            if (button == ButtonType.OK) {
+                Map<String, String> result = new HashMap<>();
+                result.put("ownerId", generatedUserId);
+                result.put("editorCode", editorCode);
+                result.put("viewerCode", viewerCode);
+                result.put("title", titleField.getText());
+                return result;
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(inputMap -> {
+            String ownerId = inputMap.get("ownerId");
+            String editor = inputMap.get("editorCode");
+            String viewer = inputMap.get("viewerCode");
+            String title = inputMap.get("title");
+
+            createDocumentRequest(ownerId, editor, viewer, title);
         });
     }
 
-    private void showCreateDocumentDialog() {
-        // Create the document via API
-        // POST http://localhost:8080/api/documents
-
-        // For demo, we'll just create a local document
-        String newDocId = "DOC-" + UUID.randomUUID().toString().substring(0, 5);
-        joinDocumentOnServer("New Document", newDocId, "editor");
-    }
-
-    private void joinDocumentOnServer(String name, String mode, String code) {
+    private void createDocumentRequest(String ownerId, String editorCode, String viewerCode, String title) {
+        String url = API_URL+"documents/create?userId=" + ownerId +
+                "&editorcode=" + editorCode + "&viewercode=" + viewerCode + "&title=" + title;
+        System.out.println("Creating document for user " + ownerId);
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8080/api/documents/by-share-code/" + code))
+                .uri(URI.create(url))
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(HttpResponse::body)
+                .thenAccept(responseBody -> {
+                    System.out.println("Create response: " + responseBody);
+                    Platform.runLater(() -> {
+                        try {
+                            ObjectMapper mapper = new ObjectMapper();
+                            JsonNode json = mapper.readTree(responseBody);
+                            String documentId = json.get("id").asText();
+                            openDocument(title,documentId, "editor");
+                        } catch (Exception e) {
+                            handleError(e);
+                        }
+                    });
+                })
+                .exceptionally(e -> {
+                    handleError(e);
+                    return null;
+                });
+    }
+
+
+
+    private void joinDocumentOnServer(String title, String code) {
+        System.out.println("Joining " + title  + " With code: " + code);
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(API_URL+"documents/by-share-code/" + code+"/"+generatedUserId))
                 .GET()
                 .build();
 
@@ -220,7 +275,9 @@ public class DocumentsOverviewController {
                             ObjectMapper mapper = new ObjectMapper();
                             JsonNode json = mapper.readTree(responseBody);
                             String documentId = json.get("id").asText();
-                            openDocument(documentId, mode);
+                            String mode = json.get("role").asText();
+                            System.out.println("Join Doc Id: " + documentId + " Mode: " + mode);
+                            openDocument(title,documentId, mode);
                         } catch (Exception e) {
                             handleError(e);
                         }
@@ -232,12 +289,17 @@ public class DocumentsOverviewController {
                 });
     }
 
-    private void openDocument(String docId, String mode) {
-        CollabSessionController sessionController = new CollabSessionController(docId, generatedUserId, mode);
+    private void openDocument(String title,String docId, String mode) {
+        System.out.println("Opening " + title  + " With id: " + docId);
+        CollabSessionController sessionController = new CollabSessionController(docId,title,
+                generatedUserId, mode.equals("editor"));
         root.getScene().setRoot(sessionController.getRoot());
     }
 
     public BorderPane getRoot() {
         return root;
+    }
+    private String generateRandomCode() {
+        return UUID.randomUUID().toString().substring(0, 6);
     }
 }

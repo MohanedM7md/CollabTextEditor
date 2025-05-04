@@ -1,5 +1,6 @@
 package com.example.server.controller;
 
+import com.example.server.dto.responses.ShareCodeResponse;
 import com.example.server.model.Document;
 import com.example.server.service.DocumentService;
 import org.springframework.core.io.InputStreamResource;
@@ -41,11 +42,11 @@ public class DocumentController {
     }
 
 
-    @GetMapping("/by-share-code/{shareCode}")
-    public ResponseEntity<Document> getDocumentByShareCode(@PathVariable String shareCode) {
-        System.out.println("getDocumentByShareCode: "+shareCode);
-        return documentService.findByShareCode(shareCode)
-                .map(ResponseEntity::ok)
+    @GetMapping("/by-share-code/{shareCode}/{userId}")
+    public ResponseEntity<ShareCodeResponse> getDocumentByShareCode(@PathVariable String shareCode, @PathVariable String userId) {
+
+        return documentService.joinByShareCode(shareCode, userId)
+                .map(pair -> ResponseEntity.ok(new ShareCodeResponse(pair.getLeft().getId(), pair.getRight())))
                 .orElse(ResponseEntity.notFound().build());
     }
 

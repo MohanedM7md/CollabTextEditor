@@ -49,7 +49,13 @@ public class Document {
     public boolean canView(String userId) {
         return this.crdtDocument.canView(userId)|| canEdit(userId);
     }
+    public void addEditor(String id) {
+        this.crdtDocument.addEditor(id);
+    }
 
+    public void addViewer(String id) {
+        this.crdtDocument.addViewer(id);
+    }
     public void updateTimestamp() {
         this.updatedAt = LocalDateTime.now();
     }

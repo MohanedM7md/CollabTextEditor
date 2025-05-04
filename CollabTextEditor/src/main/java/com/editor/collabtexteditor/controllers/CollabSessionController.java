@@ -1,7 +1,9 @@
 package com.editor.collabtexteditor.controllers;
 
 import com.editor.collabtexteditor.model.*;
-import com.editor.collabtexteditor.Networking.*;
+import com.editor.collabtexteditor.Networking.CollaborationWebSocket;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -17,6 +19,8 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.editor.collabtexteditor.Configs.API_URL;
+
 public class CollabSessionController {
     private final BorderPane root = new BorderPane();
     private final TextArea textArea = new TextArea();
@@ -30,12 +34,14 @@ public class CollabSessionController {
     private final Button shareBtn = new Button("Share");
     private final Label docInfoLabel = new Label();
     private final ProgressIndicator loadingIndicator = new ProgressIndicator();
-    private final VBox activeUsersBox = new VBox(8);
-
+    private final ListView<String> activeUsersList = new ListView<>();
+    private final VBox activeUsersBox = new VBox(5
+            ,new Label(),
+            activeUsersList);
     private CollaborationWebSocket webSocketClient;
-    private final String userId;
     private final String docId;
-    private final String userMode;
+    private final String userId;
+    private final boolean isEditor;
     private final Map<String, Integer> remoteCursors = new ConcurrentHashMap<>();
     private final Map<String, String> cursorColors = new ConcurrentHashMap<>();
     private final Map<String, String> activeUsers = new ConcurrentHashMap<>();
@@ -50,15 +56,17 @@ public class CollabSessionController {
     private String documentCreator = "";
     private String lastModified = "";
 
-    public CollabSessionController(String docId, String userId, String userMode) {
+    public CollabSessionController(String docId, String title, String userId, boolean isEditor) {
         this.docId = docId;
         this.userId = userId;
-        this.userMode = userMode;
+        this.isEditor = isEditor;
+        Label titleLabel = new Label();
+        titleLabel.setText(title);
 
         applyCssStyles();
         initializeUI();
         setupEventHandlers();
-        fetchDocumentFromAPI();
+        loadDocument();
     }
 
     private void applyCssStyles() {
@@ -285,22 +293,30 @@ public class CollabSessionController {
         });
     }
 
-    private void fetchDocumentFromAPI() {
+    private void loadDocument() {
+        System.out.println("[DEBUG] loadDocument() called");
         loadingIndicator.setVisible(true);
         statusLabel.setText("Fetching document from server...");
 
-        String apiUrl = "http://localhost:8080/api/documents/" + docId;
+        String apiUrl = API_URL + "documents/" + docId;
+        System.out.println("[DEBUG] Constructed API URL: " + apiUrl);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(apiUrl))
-                .header("Content-Type", "application/json")
                 .GET()
                 .build();
 
+        System.out.println("[DEBUG] HTTP GET request built, sending asynchronously...");
+
         httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApply(HttpResponse::body)
-                .thenAccept(this::handleDocumentResponse)
+                .thenAccept(response -> {
+                    System.out.println("[DEBUG] Received HTTP response with status code: " + response.statusCode());
+                    System.out.println("[DEBUG] Response body:\n" + response.body());
+                    handleDocumentResponse(response.body());
+                })
                 .exceptionally(e -> {
+                    System.out.println("[ERROR] HTTP request failed: " + e.getMessage());
+                    e.printStackTrace();
                     Platform.runLater(() -> {
                         loadingIndicator.setVisible(false);
                         statusLabel.setText("Error: Failed to load document");
@@ -314,19 +330,41 @@ public class CollabSessionController {
                 });
     }
 
+
     private void handleDocumentResponse(String jsonResponse) {
+        System.out.println("[DEBUG] Received JSON response:\n" + jsonResponse);
+
         try {
             // Parse the document response
-            DocumentResponse docResponse = objectMapper.readValue(jsonResponse, DocumentResponse.class);
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode json = mapper.readTree(jsonResponse);
+            DocumentResponse docResponse = new DocumentResponse(
+                    json.get("id").asText(),
+                    json.get("title").asText(),
+                    json.get("ownerId").asText(),
+                    json.get("createdAt").asText(),
+                    json.get("updatedAt").asText(),
+                    json.get("editorCode").asText(),
+                    json.get("viewerCode").asText(),
+                    json.get("status").asText(),
+                    new DocumentResponse.CrdtDocument(
+                            json.get("crdtDocument").get("activeUsers").asText(),
+                            json.get("crdtDocument").get("text").asText(),
+                            mapper.convertValue(json.get("crdtDocument").get("allCursors"),
+                                    new TypeReference<Map<String, CursorPosition>>() {})
+                    )
+            );
 
             Platform.runLater(() -> {
+                System.out.println("[DEBUG] Updating UI on JavaFX thread");
+
                 // Update text area with document content
-                textArea.setText(docResponse.getContent());
+                textArea.setText(docResponse.getCrdtDocument().getText());
 
                 // Update document metadata
                 documentTitle = docResponse.getTitle();
-                documentCreator = docResponse.getCreator();
-                lastModified = docResponse.getLastModified();
+                documentCreator = docResponse.getOwnerId();
+                lastModified = docResponse.getUpdatedAt();
 
                 // Update UI with document info
                 docInfoLabel.setText(documentTitle);
@@ -337,16 +375,20 @@ public class CollabSessionController {
                 ((Label) docMetadataBox.getChildren().get(2)).setText("Modified: " + lastModified);
 
                 // Enable editing if in editor mode
-                textArea.setEditable("editor".equals(userMode));
+                textArea.setEditable(this.isEditor);
 
                 // Hide loading indicator
                 loadingIndicator.setVisible(false);
                 statusLabel.setText("Document loaded successfully");
 
                 // Connect to WebSocket for real-time collaboration
+                System.out.println("[DEBUG] Attempting to connect to session...");
                 connectToSession();
             });
         } catch (Exception e) {
+            System.out.println("[ERROR] Failed to parse document response: " + e.getMessage());
+            e.printStackTrace();
+
             Platform.runLater(() -> {
                 loadingIndicator.setVisible(false);
                 statusLabel.setText("Error: Failed to parse document data");
@@ -358,6 +400,7 @@ public class CollabSessionController {
             });
         }
     }
+
 
     private void showShareDialog() {
         Dialog<Void> dialog = new Dialog<>();
@@ -631,30 +674,7 @@ public class CollabSessionController {
         return root;
     }
 
-    // Define model classes for REST API responses
-    private static class DocumentResponse {
-        private String id;
-        private String title;
-        private String content;
-        private String creator;
-        private String lastModified;
 
-        // Getters and setters
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-
-        public String getTitle() { return title; }
-        public void setTitle(String title) { this.title = title; }
-
-        public String getContent() { return content; }
-        public void setContent(String content) { this.content = content; }
-
-        public String getCreator() { return creator; }
-        public void setCreator(String creator) { this.creator = creator; }
-
-        public String getLastModified() { return lastModified; }
-        public void setLastModified(String lastModified) { this.lastModified = lastModified; }
-    }
 
     private static class UserListResponse {
         private java.util.List<UserInfo> users;

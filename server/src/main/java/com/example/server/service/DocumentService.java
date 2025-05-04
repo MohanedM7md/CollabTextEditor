@@ -2,6 +2,7 @@ package com.example.server.service;
 
 import com.example.server.model.Document;
 import com.example.server.repository.DocumentRepository;
+import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -33,9 +34,22 @@ public class DocumentService {
         repository.save(document);
     }
 
-    public Optional<Document> findByShareCode(String shareCode) {
-        return repository.findByEditorCode(shareCode)
-                .or(() -> repository.findByViewerCode(shareCode));
+    public Optional<Pair<Document, String>> joinByShareCode(String shareCode,String userId) {
+        Optional<Document> docOpt = repository.findByViewerCode(shareCode);
+        if (docOpt.isPresent()) {
+            Document doc = docOpt.get();
+            doc.addViewer(userId);
+            return Optional.of(Pair.of(doc, "viewer"));
+        }
+
+        docOpt = repository.findByEditorCode(shareCode);
+        if (docOpt.isPresent()) {
+            Document doc = docOpt.get();
+            doc.addEditor(userId);
+            return Optional.of(Pair.of(doc, "editor"));
+        }
+
+        return Optional.empty();
     }
     public List<String> getAllDocumentTitles() {
         return repository.findAll()
