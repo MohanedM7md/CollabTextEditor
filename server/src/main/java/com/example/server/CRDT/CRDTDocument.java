@@ -133,25 +133,25 @@ public class CRDTDocument {
 
         if (itemList.isEmpty()) {
             CharItem newItem = new CharItem(value, userId);
-            newItem.setPath(List.of(Integer.MAX_VALUE)); // Start with max value
+            newItem.setPath(List.of(0));
             return newItem;
         }
 
         if (position <= 0) {
-            return createItemBefore(value, itemList.getFirst(), userId);
+            return createItemBefore(value, itemList.getFirst(),userId);
         }
 
         if (position >= itemList.size()) {
-            return createItemAfter(value, itemList.getLast(), userId);
+            return createItemAfter(value, itemList.getLast(),userId);
         }
 
-        return createItemBetween(value, itemList.get(position-1), itemList.get(position), userId);
+        return createItemBetween(value, itemList.get(position-1), itemList.get(position),userId);
     }
 
     private CharItem createItemBefore(char value, CharItem existing, String userId) {
         List<Integer> newPath = new ArrayList<>(existing.getPath());
         int lastIdx = newPath.size() - 1;
-        newPath.set(lastIdx, newPath.get(lastIdx) - 1);
+        newPath.set(lastIdx, newPath.get(lastIdx) + 1);
 
         CharItem newItem = new CharItem(value, userId);
         newItem.setPath(newPath);
@@ -169,7 +169,7 @@ public class CRDTDocument {
 
     private CharItem createItemBetween(char value, CharItem before, CharItem after, String userId) {
         List<Integer> childPath = new ArrayList<>(before.getPath());
-        childPath.add(Integer.MAX_VALUE); // Start with max value
+        childPath.add(0);
         CharItem testItem = new CharItem('x', "test", 0, childPath);
 
         if (items.comparator().compare(testItem, after) < 0) {
@@ -177,7 +177,7 @@ public class CRDTDocument {
             newItem.setPath(childPath);
             return newItem;
         } else {
-            return createItemBefore(value, after, userId);
+            return createItemBefore(value, after,userId);
         }
     }
 
@@ -255,18 +255,17 @@ public class CRDTDocument {
     private static class CharItemComparator implements Comparator<CharItem> {
         @Override
         public int compare(CharItem a, CharItem b) {
-            // Compare paths in reverse order for position 0 insertions
             int minLength = Math.min(a.getPath().size(), b.getPath().size());
             for (int i = 0; i < minLength; i++) {
-                int cmp = Integer.compare(b.getPath().get(i), a.getPath().get(i)); // Reversed comparison
+                int cmp = Integer.compare(a.getPath().get(i), b.getPath().get(i));
                 if (cmp != 0) return cmp;
             }
             if (a.getPath().size() != b.getPath().size()) {
-                return Integer.compare(b.getPath().size(), a.getPath().size()); // Reversed
+                return Integer.compare(a.getPath().size(), b.getPath().size());
             }
             int userCmp = b.getUserId().compareTo(a.getUserId());
             if (userCmp != 0) return userCmp;
-            return Long.compare(b.getTimestamp(), a.getTimestamp()); // Reversed
+            return Long.compare(a.getTimestamp(), b.getTimestamp());
         }
     }
 
