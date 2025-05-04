@@ -10,8 +10,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        System.out.println("[WebSocketConfig] Registering STOMP endpoint at /ws");
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*");
+        System.out.println("[WebSocketConfig] STOMP endpoint registered with CORS: *");
     }
 
     @Override
