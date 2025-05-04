@@ -23,7 +23,7 @@ import static com.editor.collabtexteditor.Configs.API_URL;
 
 public class DocumentsOverviewController {
     private final BorderPane root = new BorderPane();
-    private final String generatedUserId = UUID.randomUUID().toString().substring(0, 8);
+    private final String generatedUserId = UUID.randomUUID().toString().substring(0, 3);
 
     public DocumentsOverviewController() {
         initializeUI();
@@ -158,10 +158,13 @@ public class DocumentsOverviewController {
         dialog.setHeaderText("Join " + docName);
 
         // Code input field
+        TextField userNameField = new TextField();
+        userNameField.setPromptText("Your name");
         TextField codeField = new TextField();
         codeField.setPromptText("Enter access code");
 
         VBox content = new VBox(15,
+                new Label("Enter a Name:"), userNameField,
                 new Label("Enter access code:"),
                 codeField);
         content.setPadding(new Insets(20));
@@ -175,10 +178,10 @@ public class DocumentsOverviewController {
             }
             return null;
         });
-
+        final String userId = userNameField.getText() + generatedUserId;
         dialog.showAndWait().ifPresent(code -> {
                 // Just call the function with name and code
-            joinDocumentOnServer(docName, code);
+            joinDocumentOnServer(docName, code,userId);
         });
     }
     private void showCreateDocumentDialog() {
@@ -187,6 +190,8 @@ public class DocumentsOverviewController {
         dialog.setHeaderText("Enter document title");
 
         TextField titleField = new TextField();
+        TextField userNameField = new TextField();
+        userNameField.setPromptText("Your name");
         titleField.setPromptText("Document Title");
 
         // Auto-generate editor and viewer codes
@@ -194,7 +199,7 @@ public class DocumentsOverviewController {
         String viewerCode = generateRandomCode();
 
         VBox content = new VBox(10,
-                new Label("Owner of the document: " + generatedUserId),
+                new Label("Enter a Name:"), userNameField,
                 new Label("Editor Code: " + editorCode),
                 new Label("Viewer Code: " + viewerCode),
                 new Label("Title:"), titleField);
@@ -202,11 +207,11 @@ public class DocumentsOverviewController {
 
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
-
+        final String userid = userNameField.getText()+generatedUserId;
         dialog.setResultConverter(button -> {
             if (button == ButtonType.OK) {
                 Map<String, String> result = new HashMap<>();
-                result.put("ownerId", generatedUserId);
+                result.put("ownerId", userid);
                 result.put("editorCode", editorCode);
                 result.put("viewerCode", viewerCode);
                 result.put("title", titleField.getText());
@@ -257,11 +262,11 @@ public class DocumentsOverviewController {
 
 
 
-    private void joinDocumentOnServer(String title, String code) {
+    private void joinDocumentOnServer(String title, String code ,String userId) {
         System.out.println("Joining " + title  + " With code: " + code);
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(API_URL+"documents/by-share-code/" + code+"/"+generatedUserId))
+                .uri(URI.create(API_URL+"documents/by-share-code/" + code+"/"+userId))
                 .GET()
                 .build();
 

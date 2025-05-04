@@ -56,7 +56,8 @@ public class CollabSessionController {
     private String documentTitle = "";
     private String documentCreator = "";
     private String lastModified = "";
-
+    private String viewerCode = "";
+    private String editorCode = "";
     public CollabSessionController(String docId, String title, String userId, boolean isEditor) {
         this.docId = docId;
         this.userId = userId;
@@ -355,6 +356,9 @@ public class CollabSessionController {
                                     new TypeReference<List<CursorPosition>>() {})
                     )
             );
+            this.editorCode = json.get("editorCode").asText();
+            this.viewerCode = json.get("viewerCode").asText();
+
             System.out.println("====== DocumentResponse Debug Info ======");
             System.out.println("ID: " + json.get("id").asText());
             System.out.println("Title: " + json.get("title").asText());
@@ -397,6 +401,7 @@ public class CollabSessionController {
                 ((Label) docMetadataBox.getChildren().get(2)).setText("Modified: " + lastModified);
 
                 // Enable editing if in editor mode
+                System.out.println("I am an editor? " + isEditor);
                 textArea.setEditable(this.isEditor);
 
                 // Hide loading indicator
@@ -447,8 +452,8 @@ public class CollabSessionController {
         dialog.setHeaderText("Share this document with others");
 
         // Generate sharing codes
-        String editorCode = docId + "-EDIT";
-        String viewerCode = docId + "-VIEW";
+        String editorCode = this.editorCode;
+        String viewerCode = this.viewerCode;
 
         // Create dialog content
         VBox content = new VBox(15);
@@ -539,7 +544,7 @@ public class CollabSessionController {
 
     private void connectToSession() {
         try {
-            String wsUrl = "ws://localhost:8080/ws/editor";
+            String wsUrl = "ws://localhost:8080/ws";
             webSocketClient = new CollaborationWebSocket(
                     new URI(wsUrl),
                     this::handleServerMessage,
@@ -552,8 +557,10 @@ public class CollabSessionController {
             updateConnectionStatus(true);
 
         } catch (Exception e) {
-            statusLabel.setText("Connection failed: " + e.getMessage());
-            statusLabel.setStyle("-fx-text-fill: #DC3545;");
+            Platform.runLater(() -> {
+                statusLabel.setText("Connection failed: " + e.getMessage());
+                statusLabel.setStyle("-fx-text-fill: #DC3545;");
+            });
             e.printStackTrace();
         }
     }
@@ -670,7 +677,6 @@ public class CollabSessionController {
                 showErrorAlert("Connection Lost",
                         "You have been disconnected from the collaboration session.",
                         "Try reloading the document or check your internet connection.");
-                textArea.setDisable(true);
             }
         });
     }
