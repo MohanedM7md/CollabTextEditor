@@ -29,12 +29,13 @@ public class Document {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public Document(String ownerId) {
+    public Document(String ownerId, String editorCode ,String viewerCode,String title) {
         this();
         this.ownerId = ownerId;
         this.crdtDocument = new CRDTDocument(id, ownerId);
-        this.editorCode = UUID.randomUUID().toString();
-        this.viewerCode = UUID.randomUUID().toString();
+        this.editorCode = editorCode;
+        this.viewerCode = viewerCode;
+        this.title=title;
     }
 
     public enum DocumentStatus {

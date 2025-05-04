@@ -20,8 +20,8 @@ public class DocumentController {
     }
 
     @PostMapping("/create")
-    public Document createDocument(@RequestParam String userId) {
-        return documentService.createDocument(userId);
+    public Document createDocument(@RequestParam String userId,@RequestParam String editorcode,@RequestParam String viewercode,@RequestParam String title) {
+        return documentService.createDocument(userId,editorcode,viewercode,title);
     }
 
 
@@ -49,7 +49,7 @@ public class DocumentController {
             Document document = documentService.findById(id)
                     .orElseThrow(() -> new RuntimeException("Document not found"));
 
-            File tempFile = File.createTempFile("import-", ".txt");
+            File tempFile = new File("crdt_single_thread_test.txt");
             file.transferTo(tempFile);
 
             document.importFromTextFile(tempFile, userId);
@@ -72,7 +72,7 @@ public class DocumentController {
             Document document = documentService.findById(id)
                     .orElseThrow(() -> new RuntimeException("Document not found"));
 
-            File tempFile = File.createTempFile("export-", ".txt");
+            File tempFile = new File("crdt99.txt");
             document.exportToTextFile(tempFile);
 
             InputStreamResource resource = new InputStreamResource(new FileInputStream(tempFile));

@@ -20,7 +20,7 @@ public class CRDTStressTest {
 
     public static void main(String[] args) throws InterruptedException {
         // Create single user document
-        Document docWrapper = new Document("user1");
+        Document docWrapper = new Document("user1","tr6","tg65","hgg");
         CRDTDocument document = docWrapper.getCrdtDocument();
 
         String userId = "user1";
@@ -49,13 +49,27 @@ public class CRDTStressTest {
         document.delete(1, userId);
         printDocumentState(document, "After deleting at position 1");
 
+        // Delete the middle character (should be 'c')
+        document.delete(0, userId);
+        printDocumentState(document, "After deleting at position 0");
+
         // Export to file
         try {
             File outFile = new File("crdt_single_thread_test.txt");
             docWrapper.exportToTextFile(outFile);
-            System.out.println("Exported to: " + outFile.getAbsolutePath());
+            System.out.println("Exported to: " + outFile.getAbsolutePath()+"  "+ docWrapper.getId());
         } catch (IOException e) {
             System.err.println("Export failed: " + e.getMessage());
+        }
+
+        try {
+            Document importedDoc = new Document("importTester","tgtgt","y56trg","565");
+            importedDoc.importFromTextFile(new File("crdt_output.txt"), "importTester");
+            System.out.println("\n=== IMPORTED DOCUMENT ===");
+            System.out.println("Imported doc ID"+ importedDoc.getId());
+            printDocumentState(importedDoc.getCrdtDocument(), "IMPORTED STATE");
+        } catch (IOException e) {
+            System.err.println("Import failed: " + e.getMessage());
         }
     }
 

@@ -14,8 +14,8 @@ public class DocumentService {
         this.repository = repository;
     }
 
-    public Document createDocument(String ownerId) {
-        Document doc = new Document(ownerId);
+    public Document createDocument(String ownerId, String editorCode ,String viewerCode,String title) {
+        Document doc = new Document(ownerId,editorCode,viewerCode,title);
         repository.save(doc);
         return doc;
     }
