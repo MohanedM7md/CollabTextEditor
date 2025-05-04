@@ -1,6 +1,6 @@
 package com.editor.collabtexteditor;
 public class Main {
     public static void main(String[] args) {
-        CollabTextEditorApp.main(args);
+        CollabTextEditorApp.launch(CollabTextEditorApp.class, args);
     }
 }
