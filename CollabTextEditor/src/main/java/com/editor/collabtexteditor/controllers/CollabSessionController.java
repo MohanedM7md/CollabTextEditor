@@ -16,6 +16,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -351,10 +352,31 @@ public class CollabSessionController {
                             json.get("crdtDocument").get("activeUsers").asText(),
                             json.get("crdtDocument").get("text").asText(),
                             mapper.convertValue(json.get("crdtDocument").get("allCursors"),
-                                    new TypeReference<Map<String, CursorPosition>>() {})
+                                    new TypeReference<List<CursorPosition>>() {})
                     )
             );
+            System.out.println("====== DocumentResponse Debug Info ======");
+            System.out.println("ID: " + json.get("id").asText());
+            System.out.println("Title: " + json.get("title").asText());
+            System.out.println("Owner ID: " + json.get("ownerId").asText());
+            System.out.println("Created At: " + json.get("createdAt").asText());
+            System.out.println("Updated At: " + json.get("updatedAt").asText());
+            System.out.println("Editor Code: " + json.get("editorCode").asText());
+            System.out.println("Viewer Code: " + json.get("viewerCode").asText());
+            System.out.println("Status: " + json.get("status").asText());
 
+            JsonNode crdtNode = json.get("crdtDocument");
+            System.out.println("---- CRDT Document ----");
+            System.out.println("Active Users: " + crdtNode.get("activeUsers").asText());
+            System.out.println("Text: " + crdtNode.get("text").asText());
+
+// أطبع الـ cursors كلها
+            System.out.println("All Cursors:");
+            for (JsonNode cursorNode : crdtNode.get("allCursors")) {
+                System.out.println("  Cursor => userId: " + cursorNode.get("userId").asText() +
+                        ", position: " + cursorNode.get("position").asInt());
+            }
+            System.out.println("=========================================");
             Platform.runLater(() -> {
                 System.out.println("[DEBUG] Updating UI on JavaFX thread");
 
@@ -380,6 +402,23 @@ public class CollabSessionController {
                 // Hide loading indicator
                 loadingIndicator.setVisible(false);
                 statusLabel.setText("Document loaded successfully");
+                if (docResponse.getCrdtDocument().getAllCursors() != null) {
+                    // Clear existing data
+                    remoteCursors.clear();
+                    cursorColors.clear();
+                    activeUsers.clear();
+
+                    // Process each cursor from the response
+                    for (CursorPosition cursor : docResponse.getCrdtDocument().getAllCursors()) {
+                        String userId = cursor.getUserId();
+                        remoteCursors.put(userId, cursor.getPosition());
+                        cursorColors.put(userId, cursor.getColor());
+                        updateActiveUsers(userId, cursor.getColor());
+                    }
+
+                    // Visualize the cursors
+                    visualizeRemoteCursors();
+                }
 
                 // Connect to WebSocket for real-time collaboration
                 System.out.println("[DEBUG] Attempting to connect to session...");

@@ -8,6 +8,7 @@ module com.editor.collabtexteditor {
     exports com.editor.collabtexteditor.model;
     requires Java.WebSocket;
     requires java.net.http;
+    requires static lombok;
 
     opens com.editor.collabtexteditor to javafx.fxml;
     exports com.editor.collabtexteditor;

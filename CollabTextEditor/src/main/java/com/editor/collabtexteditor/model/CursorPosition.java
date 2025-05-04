@@ -1,9 +1,17 @@
 package com.editor.collabtexteditor.model;
 
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
 public class CursorPosition {
-    private final String userId;
+    private String userId;
     private int position;
-    private final String color;
+    private String color;
+
+    // No-arg constructor required by Jackson
+    public CursorPosition() {}
 
     public CursorPosition(String userId, int position, String color) {
         this.userId = userId;
