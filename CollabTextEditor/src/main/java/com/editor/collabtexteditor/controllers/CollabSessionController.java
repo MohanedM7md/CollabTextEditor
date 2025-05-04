@@ -1,7 +1,8 @@
 package com.editor.collabtexteditor.controllers;
 
+import com.editor.collabtexteditor.Networking.CollaborationStompClient;
 import com.editor.collabtexteditor.model.*;
-import com.editor.collabtexteditor.Networking.CollaborationWebSocket;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,7 +40,7 @@ public class CollabSessionController {
     private final VBox activeUsersBox = new VBox(5
             ,new Label(),
             activeUsersList);
-    private CollaborationWebSocket webSocketClient;
+    private CollaborationStompClient stompClient;  // Add this line
     private final String docId;
     private final String userId;
     private final boolean isEditor;
@@ -235,44 +236,48 @@ public class CollabSessionController {
 
     private void setupEventHandlers() {
         backBtn.setOnAction(e -> {
-            if (webSocketClient != null) {
-                webSocketClient.close();
+            if (stompClient != null) {
+                stompClient.disconnect();
             }
             DocumentsOverviewController overviewController = new DocumentsOverviewController();
             root.getScene().setRoot(overviewController.getRoot());
         });
-
+        System.out.println("Not Null");
         shareBtn.setOnAction(e -> showShareDialog());
 
         textArea.textProperty().addListener((obs, oldText, newText) -> {
-            if (webSocketClient == null || !textArea.isEditable()) return;
+            if (stompClient == null || !textArea.isEditable()) return;
 
             int changePos = findChangePosition(oldText, newText);
             if (changePos >= 0) {
                 if (newText.length() > oldText.length()) {
                     char c = newText.charAt(changePos);
+                    System.out.println(c);
+                    System.out.println("is inserted");
                     InsertRequest req = new InsertRequest(userId, c, changePos);
                     sendMessage("/app/document/" + docId + "/insert", req);
                 } else if (oldText.length() > newText.length()) {
                     DeleteRequest req = new DeleteRequest(userId, changePos);
+
+                    System.out.println("is deleted");
                     sendMessage("/app/document/" + docId + "/delete", req);
                 }
             }
         });
 
         textArea.caretPositionProperty().addListener((obs, oldPos, newPos) -> {
-            if (webSocketClient == null || !textArea.isEditable()) return;
+            if (stompClient == null || !textArea.isEditable()) return;
             CursorUpdateRequest req = new CursorUpdateRequest(userId, newPos.intValue(), getColorForUser(userId));
             sendMessage("/app/document/" + docId + "/cursor", req);
         });
 
         undoBtn.setOnAction(e -> {
-            if (webSocketClient == null) return;
+            if (stompClient == null) return;
             sendMessage("/app/document/" + docId + "/undo", new UndoRequest(userId));
         });
 
         redoBtn.setOnAction(e -> {
-            if (webSocketClient == null) return;
+            if (stompClient == null) return;
             sendMessage("/app/document/" + docId + "/redo", new RedoRequest(userId));
         });
 
@@ -542,20 +547,24 @@ public class CollabSessionController {
         dialog.showAndWait();
     }
 
+    // In your CollabSessionController
     private void connectToSession() {
         try {
             String wsUrl = "ws://localhost:8080/ws";
-            webSocketClient = new CollaborationWebSocket(
-                    new URI(wsUrl),
+            stompClient = new CollaborationStompClient(
+                    wsUrl,
+                    docId,  // Pass document ID
                     this::handleServerMessage,
                     () -> updateConnectionStatus(false)
             );
-            webSocketClient.connectBlocking();
 
+            stompClient.connect();
+
+            // Send initial connection message
             ConnectRequest joinReq = new ConnectRequest(userId, docId);
-            sendMessage("/app/document/connect", joinReq);
-            updateConnectionStatus(true);
+            stompClient.send("/app/document/connect", joinReq);
 
+            updateConnectionStatus(true);
         } catch (Exception e) {
             Platform.runLater(() -> {
                 statusLabel.setText("Connection failed: " + e.getMessage());
@@ -565,15 +574,15 @@ public class CollabSessionController {
         }
     }
 
-    private void sendMessage(String path, Object body) {
-        if (webSocketClient != null && webSocketClient.isOpen()) {
+    private void sendMessage(String destination, Object body) {
+        if (stompClient != null) {
             try {
-                String payload = objectMapper.writeValueAsString(body);
-                webSocketClient.send(path + " " + payload);
+                stompClient.send(destination, body); // STOMP handles JSON conversion
             } catch (Exception e) {
-                System.err.println("Error sending message: " + e.getMessage());
-                statusLabel.setText("Error sending message: " + e.getMessage());
-                statusLabel.setStyle("-fx-text-fill: #DC3545;");
+                Platform.runLater(() -> {
+                    statusLabel.setText("Send error: " + e.getMessage());
+                    statusLabel.setStyle("-fx-text-fill: #DC3545;");
+                });
             }
         }
     }

@@ -6,9 +6,12 @@ module com.editor.collabtexteditor {
     requires org.kordamp.bootstrapfx.core;
     requires com.fasterxml.jackson.databind;
     exports com.editor.collabtexteditor.model;
-    requires Java.WebSocket;
+
     requires java.net.http;
     requires static lombok;
+    requires spring.messaging;
+    requires spring.websocket;
+    requires spring.core;
 
     opens com.editor.collabtexteditor to javafx.fxml;
     exports com.editor.collabtexteditor;

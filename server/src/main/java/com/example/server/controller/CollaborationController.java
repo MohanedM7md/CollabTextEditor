@@ -21,12 +21,21 @@ public class CollaborationController {
             SimpMessagingTemplate messagingTemplate) {
         this.collaborationService = collaborationService;
         this.messagingTemplate = messagingTemplate;
+        System.out.println("[CollaborationController] Initialized with collaborationService and messagingTemplate");
     }
 
     @MessageMapping("/document/{docId}/insert")
     public void handleInsert(@DestinationVariable String docId,
                              @Payload InsertRequest request) {
+        System.out.println("\n=== INSERT REQUEST ===");
+        System.out.println("Document ID: " + docId);
+        System.out.println("User ID: " + request.getUserId());
+        System.out.println("Character: '" + request.getValue()+ "'");
+        System.out.println("Position: " + request.getPosition());
+
         DocumentStateResponse response =   collaborationService.handleInsert(docId, request);
+        System.out.println("Sending response to /topic/document/" + docId + "/state");
+        System.out.println("Response text length: " + response.getText().length());
         messagingTemplate.convertAndSend("/topic/document/" + docId + "/state", response);
     }
 
@@ -40,7 +49,12 @@ public class CollaborationController {
     @MessageMapping("/document/{docId}/cursor")
     public void handleCursorUpdate(@DestinationVariable String docId,
                                    @Payload CursorUpdateRequest request) {
+        System.out.println("\n=== DELETE REQUEST ===");
+        System.out.println("Document ID: " + docId);
+        System.out.println("User ID: " + request.getUserId());
+        System.out.println("Position: " + request.getPosition());
         CursorResponse response =  collaborationService.handleCursorUpdate(docId, request);
+
         messagingTemplate.convertAndSend("/topic/document/" + docId + "/cursors", response);
     }
 
