@@ -4,6 +4,8 @@ import com.example.server.CRDT.CRDTDocument;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -31,7 +33,6 @@ public class Document {
         this();
         this.ownerId = ownerId;
         this.crdtDocument = new CRDTDocument(id, ownerId);
-        this.editorIds.add(ownerId);
         this.editorCode = UUID.randomUUID().toString();
         this.viewerCode = UUID.randomUUID().toString();
     }
@@ -40,15 +41,31 @@ public class Document {
         ACTIVE, ARCHIVED, DELETED
     }
 
-    public boolean canEdit(String userId) {
-        return editorIds.contains(userId) || ownerId.equals(userId);
-    }
-
-    public boolean canView(String userId) {
-        return viewerIds.contains(userId) || canEdit(userId);
-    }
-
     public void updateTimestamp() {
         this.updatedAt = LocalDateTime.now();
+    }
+    public void exportToTextFile(File file) throws IOException {
+        if (crdtDocument == null) {
+            throw new IllegalStateException("No CRDT document to export.");
+        }
+        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
+            writer.write(crdtDocument.getText());
+        }
+    }
+
+    public void importFromTextFile(File file, String userId) throws IOException {
+        if (crdtDocument == null) {
+            this.crdtDocument = new CRDTDocument(this.id, userId);
+        }
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                for (char c : line.toCharArray()) {
+                    crdtDocument.insert(c, crdtDocument.getText().length(), userId);
+                }
+                crdtDocument.insert('\n', crdtDocument.getText().length(), userId);
+            }
+        }
     }
 }

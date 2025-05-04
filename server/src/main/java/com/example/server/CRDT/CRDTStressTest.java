@@ -1,5 +1,9 @@
 package com.example.server.CRDT;
 
+import com.example.server.model.Document;
+
+import java.io.File;
+import java.io.IOException;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -15,40 +19,46 @@ public class CRDTStressTest {
     private static final Lock printLock = new ReentrantLock();
 
     public static void main(String[] args) throws InterruptedException {
-        // Create initial document owned by user1
-        CRDTDocument document = new CRDTDocument(DOC_ID, "user1");
+        // Create single user document
+        Document docWrapper = new Document("user1");
+        CRDTDocument document = docWrapper.getCrdtDocument();
 
-        // Add other users as editors
-        for (int i = 2; i <= NUM_USERS; i++) {
-            document.addEditor("user" + i);
-            document.userConnected("user" + i);
+        String userId = "user1";
+
+        System.out.println("=== Single-threaded CRDT Test ===");
+
+        // Insert 'a' at position 0
+        document.insert('a', 0, userId);
+        printDocumentState(document, "After inserting 'a' at 0");
+
+        TimeUnit.SECONDS.sleep(2);
+        // Insert 'b' at position 0 (should push 'a' to the right)
+        document.insert('b', 0, userId);
+        printDocumentState(document, "After inserting 'b' at 0");
+
+        document.insert('p', 0, userId);
+        printDocumentState(document, "After inserting 'p' at 0");
+
+        // Insert 'c' at position 1 (between 'b' and 'a')
+        document.insert('c', 1, userId);
+        printDocumentState(document, "After inserting 'c' at 1");
+        document.insert('p', 0, userId);
+        printDocumentState(document, "After inserting 'p' at 0");
+
+        // Delete the middle character (should be 'c')
+        document.delete(1, userId);
+        printDocumentState(document, "After deleting at position 1");
+
+        // Export to file
+        try {
+            File outFile = new File("crdt_single_thread_test.txt");
+            docWrapper.exportToTextFile(outFile);
+            System.out.println("Exported to: " + outFile.getAbsolutePath());
+        } catch (IOException e) {
+            System.err.println("Export failed: " + e.getMessage());
         }
-
-        System.out.println("=== CRDT Stress Test ===");
-        System.out.println("Users: " + NUM_USERS);
-        System.out.println("Operations per user: " + OPERATIONS_PER_USER);
-        System.out.println("Initial active users: " + document.getActiveUsers());
-        printDocumentState(document, "INITIAL STATE");
-
-        // Create thread pool
-        ExecutorService executor = Executors.newFixedThreadPool(NUM_USERS);
-
-        // Submit tasks for each user
-        for (int i = 1; i <= NUM_USERS; i++) {
-            final String userId = "user" + i;
-            executor.submit(() -> userStressTest(document, userId));
-        }
-
-        // Shutdown and wait
-        executor.shutdown();
-        executor.awaitTermination(2, TimeUnit.MINUTES);
-
-        // Final state
-        System.out.println("\n=== FINAL RESULT ===");
-        printDocumentState(document, "FINAL STATE");
-        System.out.println("Active users: " + document.getActiveUsers());
-        System.out.println("All cursors: " + document.getAllCursors());
     }
+
 
     private static void userStressTest(CRDTDocument document, String userId) {
         Random random = new Random();

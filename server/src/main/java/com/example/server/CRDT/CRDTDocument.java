@@ -304,6 +304,11 @@ public class CRDTDocument {
     public boolean canEdit(String userId) {
         return editors.contains(userId);
     }
+
+    public boolean canView(String userId) {
+        return viewers.contains(userId);
+    }
+
     public DocumentStateResponse getCurrentState(String operationType, String triggeringUser) {
         return new DocumentStateResponse(
                 getText(),
