@@ -1,32 +1,37 @@
 package com.editor.collabtexteditor.controllers;
 
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
+import javafx.application.Platform;
+import javafx.geometry.*;
+import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
-import javafx.scene.text.Font;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.UUID;
 
 public class DocumentsOverviewController {
     private final BorderPane root = new BorderPane();
-    private final String generatedUserId;
+    private final String generatedUserId = UUID.randomUUID().toString().substring(0, 8);
 
     public DocumentsOverviewController() {
-        this.generatedUserId = UUID.randomUUID().toString().substring(0, 8);
         initializeUI();
+        fetchDocuments();
     }
 
     private void initializeUI() {
         // Header
         Label titleLabel = new Label("My Documents");
-        titleLabel.setFont(new Font(24));
-        HBox header = new HBox(titleLabel);
-        header.setAlignment(Pos.CENTER);
+        titleLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
+
+        Button createBtn = new Button("Create New Document");
+        createBtn.setStyle("-fx-background-color: #28A745; -fx-text-fill: white;");
+
+        HBox header = new HBox(10, titleLabel, createBtn);
+        header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(20));
 
         // Document Grid
@@ -36,57 +41,132 @@ public class DocumentsOverviewController {
         documentsGrid.setVgap(20);
         documentsGrid.setPrefColumns(3);
 
-        // Sample documents (in real app, fetch from server)
-        for (int i = 1; i <= 5; i++) {
-            VBox docBox = createDocumentBox("Document " + i);
-            documentsGrid.getChildren().add(docBox);
-        }
-
         ScrollPane scrollPane = new ScrollPane(documentsGrid);
         scrollPane.setFitToWidth(true);
 
-        // Create New Button
-        Button createNewBtn = new Button("Create New Document");
-        createNewBtn.setOnAction(e -> showCreateDocumentDialog());
-
-        VBox centerBox = new VBox(20, scrollPane, createNewBtn);
-        centerBox.setAlignment(Pos.CENTER);
-        centerBox.setPadding(new Insets(20));
-
         root.setTop(header);
-        root.setCenter(centerBox);
+        root.setCenter(scrollPane);
+
+        // Event Handlers
+        createBtn.setOnAction(e -> showCreateDocumentDialog());
     }
 
-    private VBox createDocumentBox(String docName) {
-        Rectangle docThumbnail = new Rectangle(150, 200);
-        docThumbnail.setFill(Color.LIGHTGRAY);
-        docThumbnail.setStroke(Color.DARKGRAY);
+    private void fetchDocuments() {
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8080/api/documents"))
+                .GET()
+                .build();
+
+        client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(HttpResponse::body)
+                .thenAccept(response -> {
+                    Platform.runLater(() -> {
+                        parseAndAddDocumentTitles(response);
+                    });
+                })
+                .exceptionally(e -> {
+                    e.printStackTrace();
+                    return null;
+                });
+    }
+
+    private void parseAndAddDocumentTitles(String response) {
+        // Assuming the response is a JSON array of documents, each with a "title" field
+        try {
+            JSONArray jsonArray = new JSONArray(response);
+            ObservableList<String> documentTitles = FXCollections.observableArrayList();
+
+            for (int i = 0; i < jsonArray.length(); i++) {
+                JSONObject document = jsonArray.getJSONObject(i);
+                String title = document.getString("title");
+                documentTitles.add(title);
+            }
+
+            // Now, use documentTitles to update your UI, e.g., adding them to a ListView
+            documentListView.setItems(documentTitles);
+
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    private void addDocumentCard(String docName) {
+        VBox card = new VBox(10);
+        card.setPadding(new Insets(15));
+        card.setStyle("-fx-background-color: white; -fx-border-radius: 5;");
+
+        Rectangle thumbnail = new Rectangle(150, 100);
+        thumbnail.setFill(Color.LIGHTGRAY);
 
         Label nameLabel = new Label(docName);
-        nameLabel.setMaxWidth(150);
-        nameLabel.setAlignment(Pos.CENTER);
+        nameLabel.setStyle("-fx-font-weight: bold;");
 
         Button openBtn = new Button("Open");
-        openBtn.setMaxWidth(Double.MAX_VALUE);
-        openBtn.setOnAction(e -> openDocument(docName));
+        openBtn.setOnAction(e -> showJoinOptions(docName));
 
-        VBox docBox = new VBox(10, docThumbnail, nameLabel, openBtn);
-        docBox.setAlignment(Pos.CENTER);
-        docBox.setPadding(new Insets(10));
-        docBox.setStyle("-fx-border-color: #ccc; -fx-border-radius: 5;");
+        card.getChildren().addAll(thumbnail, nameLabel, openBtn);
+        ((TilePane) ((ScrollPane) root.getCenter()).getContent()).getChildren().add(card);
+    }
 
-        return docBox;
+    private void showJoinOptions(String docName) {
+        Dialog<String> dialog = new Dialog<>();
+        dialog.setTitle("Join Document");
+        dialog.setHeaderText("Join " + docName);
+
+        // Create radio buttons for join options
+        ToggleGroup group = new ToggleGroup();
+        RadioButton editorBtn = new RadioButton("Join as Editor");
+        RadioButton viewerBtn = new RadioButton("Join as Viewer");
+        editorBtn.setToggleGroup(group);
+        viewerBtn.setToggleGroup(group);
+        editorBtn.setSelected(true);
+
+        // Code input field
+        TextField codeField = new TextField();
+        codeField.setPromptText("Enter access code");
+
+        VBox content = new VBox(15,
+                new Label("Select your access level:"),
+                editorBtn,
+                viewerBtn,
+                new Label("Enter access code:"),
+                codeField);
+        content.setPadding(new Insets(20));
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType == ButtonType.OK) {
+                String mode = editorBtn.isSelected() ? "editor" : "viewer";
+                return mode + ":" + codeField.getText();
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(result -> {
+            String[] parts = result.split(":");
+            String mode = parts[0];
+            String code = parts[1];
+
+            // Validate code and open document
+            openDocument(docName, code, mode);
+        });
     }
 
     private void showCreateDocumentDialog() {
-        // Create document and show join codes
-        CreateDocumentDialog dialog = new CreateDocumentDialog(generatedUserId);
-        // Open the document in edit mode
-        dialog.showAndWait().ifPresent(this::openDocument);
+        // Create the document via API
+        // POST http://localhost:8080/api/documents
+
+        // For demo, we'll just create a local document
+        String newDocId = "DOC-" + UUID.randomUUID().toString().substring(0, 5);
+        openDocument("New Document", newDocId, "editor");
     }
 
-    private void openDocument(String docId) {
-        CollabSessionController sessionController = new CollabSessionController(docId, generatedUserId, "editor");
+    private void openDocument(String docName, String docId, String mode) {
+        CollabSessionController sessionController = new CollabSessionController(docId, generatedUserId, mode);
         root.getScene().setRoot(sessionController.getRoot());
     }
 

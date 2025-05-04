@@ -308,7 +308,6 @@ public class CRDTDocument {
     public boolean canView(String userId) {
         return viewers.contains(userId);
     }
-
     public DocumentStateResponse getCurrentState(String operationType, String triggeringUser) {
         return new DocumentStateResponse(
                 getText(),

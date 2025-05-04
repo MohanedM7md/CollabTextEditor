@@ -32,8 +32,6 @@ public class CreateDocumentDialog extends Dialog<String> {
         ));
 
         getDialogPane().getButtonTypes().add(ButtonType.OK);
-
-        // Return the editor code when dialog closes
         setResultConverter(buttonType -> editorCode);
     }
 

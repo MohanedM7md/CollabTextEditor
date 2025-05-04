@@ -42,6 +42,14 @@ public class Document {
         ACTIVE, ARCHIVED, DELETED
     }
 
+    public boolean canEdit(String userId) {
+       return this.crdtDocument.canEdit(userId);
+    }
+
+    public boolean canView(String userId) {
+        return this.crdtDocument.canView(userId)|| canEdit(userId);
+    }
+
     public void updateTimestamp() {
         this.updatedAt = LocalDateTime.now();
     }

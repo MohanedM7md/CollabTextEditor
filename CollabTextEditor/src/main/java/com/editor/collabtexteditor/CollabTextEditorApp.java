@@ -11,7 +11,7 @@ public class CollabTextEditorApp extends Application {
     @Override
     public void start(Stage primaryStage) {
         DocumentsOverviewController overviewController = new DocumentsOverviewController();
-        Scene scene = new Scene(overviewController.getRoot(), 800, 600);
+        Scene scene = new Scene(overviewController.getRoot(), 1000, 700);
 
         // Load CSS
         try {
