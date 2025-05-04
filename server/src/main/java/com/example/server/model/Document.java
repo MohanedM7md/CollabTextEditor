@@ -31,7 +31,6 @@ public class Document {
         this();
         this.ownerId = ownerId;
         this.crdtDocument = new CRDTDocument(id, ownerId);
-        this.editorIds.add(ownerId);
         this.editorCode = UUID.randomUUID().toString();
         this.viewerCode = UUID.randomUUID().toString();
     }
@@ -41,11 +40,11 @@ public class Document {
     }
 
     public boolean canEdit(String userId) {
-        return editorIds.contains(userId) || ownerId.equals(userId);
+       return this.crdtDocument.canEdit(userId);
     }
 
     public boolean canView(String userId) {
-        return viewerIds.contains(userId) || canEdit(userId);
+        return this.crdtDocument.canView(userId)|| canEdit(userId);
     }
 
     public void updateTimestamp() {
