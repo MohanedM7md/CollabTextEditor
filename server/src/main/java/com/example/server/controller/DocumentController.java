@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -22,17 +24,26 @@ public class DocumentController {
     @PostMapping("/create")
     public Document createDocument(@RequestParam String userId,@RequestParam String editorcode,@RequestParam String viewercode,@RequestParam String title) {
         return documentService.createDocument(userId,editorcode,viewercode,title);
+
     }
 
 
+    @GetMapping("/titles")
+    public List<String> getDocumentTitles() {
+        System.out.println("getDocumentTitles");
+        return documentService.getAllDocumentTitles();
+    }
+
     @GetMapping("/{id}")
     public Optional<Document> getDocument(@PathVariable String id) {
+        System.out.println("getDocument: "+id);
         return documentService.findById(id);
     }
 
 
     @GetMapping("/by-share-code/{shareCode}")
     public ResponseEntity<Document> getDocumentByShareCode(@PathVariable String shareCode) {
+        System.out.println("getDocumentByShareCode: "+shareCode);
         return documentService.findByShareCode(shareCode)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
@@ -54,7 +65,7 @@ public class DocumentController {
 
             document.importFromTextFile(tempFile, userId);
             document.updateTimestamp();
-
+            documentService.save(document);
             return ResponseEntity.ok("Import successful.");
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -86,4 +97,5 @@ public class DocumentController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
 }

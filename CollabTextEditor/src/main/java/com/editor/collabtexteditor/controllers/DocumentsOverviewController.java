@@ -1,6 +1,10 @@
 package com.editor.collabtexteditor.controllers;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.application.Platform;
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.*;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
@@ -54,42 +58,76 @@ public class DocumentsOverviewController {
     private void fetchDocuments() {
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:8080/api/documents"))
+                .uri(URI.create("http://localhost:8080/api/documents/titles"))
                 .GET()
                 .build();
 
         client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
                 .thenApply(HttpResponse::body)
                 .thenAccept(response -> {
+                    System.out.println("Response from server: " + response);  // Debugging output
                     Platform.runLater(() -> {
                         parseAndAddDocumentTitles(response);
                     });
                 })
                 .exceptionally(e -> {
-                    e.printStackTrace();
+                    // Handle the exception and show a user-friendly message
+                    handleError(e);
                     return null;
                 });
     }
 
     private void parseAndAddDocumentTitles(String response) {
-        // Assuming the response is a JSON array of documents, each with a "title" field
         try {
-            JSONArray jsonArray = new JSONArray(response);
+            // Parse the response as a JSON array of strings
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode jsonArray = objectMapper.readTree(response);
+
             ObservableList<String> documentTitles = FXCollections.observableArrayList();
 
-            for (int i = 0; i < jsonArray.length(); i++) {
-                JSONObject document = jsonArray.getJSONObject(i);
-                String title = document.getString("title");
-                documentTitles.add(title);
+            // Loop through the JSON array and add each string to the documentTitles list
+            if (jsonArray.isArray()) {
+                for (JsonNode titleNode : jsonArray) {
+                    documentTitles.add(titleNode.asText()); // Extract each string value from the JSON array
+                }
             }
 
-            // Now, use documentTitles to update your UI, e.g., adding them to a ListView
-            documentListView.setItems(documentTitles);
+            // Update UI with document titles
+            for (String title : documentTitles) {
+                addDocumentCard(title); // Assuming addDocumentCard adds the title to the UI
+            }
 
-        } catch (JSONException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            // Handle any parsing errors
+            handleError(e);
         }
     }
+    // Method to handle and display error messages
+    private void handleError(Throwable error) {
+        String errorMessage = "An error occurred. Please try again later.";
+
+        if (error instanceof java.net.ConnectException) {
+            errorMessage = "Failed to connect to the server. Please ensure the server is running.";
+        } else if (error instanceof java.net.SocketTimeoutException) {
+            errorMessage = "The connection timed out. Please check your network.";
+        } else if (error instanceof com.fasterxml.jackson.core.JsonProcessingException) {
+            errorMessage = "There was an issue processing the server response. Please try again.";
+        }
+
+        // Show an error message in the UI, for example using a dialog
+        showErrorDialog(errorMessage);
+    }
+
+    // Method to show an error dialog
+    private void showErrorDialog(String message) {
+        // Using a simple Alert as an example (JavaFX)
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Error");
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
 
 
     private void addDocumentCard(String docName) {
@@ -166,6 +204,7 @@ public class DocumentsOverviewController {
     }
 
     private void openDocument(String docName, String docId, String mode) {
+
         CollabSessionController sessionController = new CollabSessionController(docId, generatedUserId, mode);
         root.getScene().setRoot(sessionController.getRoot());
     }

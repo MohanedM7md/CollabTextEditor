@@ -3,6 +3,8 @@ package com.example.server.repository;
 import com.example.server.model.Document;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,5 +37,10 @@ public class InMemoryDocumentRepository implements DocumentRepository {
         documents.put(document.getId(), document);
         editorCodes.put(document.getEditorCode(), document.getId());
         viewerCodes.put(document.getViewerCode(), document.getId());
+    }
+    @Override
+    public List<Document> findAll() {
+        System.out.println("Documents in memory: " + documents.size());
+        return new ArrayList<>(documents.values());
     }
 }
