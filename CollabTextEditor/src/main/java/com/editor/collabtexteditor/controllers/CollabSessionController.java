@@ -66,7 +66,7 @@ public class CollabSessionController {
     private boolean isApplyingRemoteUpdate = false;
     private boolean isApplyingRemoteCursor = false;
     private final Pane overlayPane = new Pane();
-    private final Map<String, Circle> cursorIndicators = new ConcurrentHashMap<>();
+    private final Map<String, Rectangle> cursorIndicators = new ConcurrentHashMap<>();
     // For REST API calls
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -800,8 +800,8 @@ public class CollabSessionController {
                 Point2D location = estimateCursorPosition(position, charWidth, lineHeight, startY);
 
                 // Get or create the indicator
-                Circle indicator = cursorIndicators.computeIfAbsent(userId, k -> {
-                    Circle circle = new Circle(0, 0, 5);
+                Rectangle indicator = cursorIndicators.computeIfAbsent(userId, k -> {
+                    Rectangle circle = new Rectangle(2, 20);
                     circle.setMouseTransparent(true);
                     overlayPane.getChildren().add(circle);
                     return circle;
