@@ -744,7 +744,8 @@ public class CollabSessionController {
                 colorIndicator.setStyle("-fx-background-color: " + clr + "; -fx-background-radius: 6px;");
 
                 // Username label (show "You" for current user)
-                String displayName = id.equals(this.userId) ? "You" : "User " + id.substring(0, 4);
+
+                String displayName = id.equals(this.userId) ? "You" : "User " + id.substring(0, 3);
                 Label nameLabel = new Label(displayName);
                 if (id.equals(this.userId)) {
                     nameLabel.setStyle("-fx-font-weight: bold;");
@@ -813,11 +814,25 @@ public class CollabSessionController {
     }
 
     private int findChangePosition(String oldText, String newText) {
-        int min = Math.min(oldText.length(), newText.length());
-        for (int i = 0; i < min; i++) {
-            if (oldText.charAt(i) != newText.charAt(i)) return i;
+        // Find first differing character from start
+        int minLength = Math.min(oldText.length(), newText.length());
+        for (int i = 0; i < minLength; i++) {
+            if (oldText.charAt(i) != newText.charAt(i)) {
+                return i;
+            }
         }
-        return newText.length() > oldText.length() ? newText.length() - 1 : min;
+
+
+        if (newText.length() > oldText.length()) {
+
+            return oldText.length();
+        } else if (oldText.length() > newText.length()) {
+            // Deletion at end
+            return newText.length();
+        }
+
+
+        return -1;
     }
 
     private String getColorForUser(String userId) {
