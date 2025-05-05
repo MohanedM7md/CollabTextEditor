@@ -49,7 +49,7 @@ public class CollaborationController {
     @MessageMapping("/document/{docId}/cursor")
     public void handleCursorUpdate(@DestinationVariable String docId,
                                    @Payload CursorUpdateRequest request) {
-        System.out.println("\n=== DELETE REQUEST ===");
+        System.out.println("\n=== Cursor ===");
         System.out.println("Document ID: " + docId);
         System.out.println("User ID: " + request.getUserId());
         System.out.println("Position: " + request.getPosition());

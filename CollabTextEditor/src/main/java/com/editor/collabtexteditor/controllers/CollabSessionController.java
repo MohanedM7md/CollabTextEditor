@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import static com.editor.collabtexteditor.Configs.API_URL;
 
@@ -47,6 +48,7 @@ public class CollabSessionController {
     private final Map<String, Integer> remoteCursors = new ConcurrentHashMap<>();
     private final Map<String, String> cursorColors = new ConcurrentHashMap<>();
     private final Map<String, String> activeUsers = new ConcurrentHashMap<>();
+    private boolean isApplyingRemoteUpdate = false;
 
     // For REST API calls
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -59,6 +61,8 @@ public class CollabSessionController {
     private String lastModified = "";
     private String viewerCode = "";
     private String editorCode = "";
+    private Consumer<String> messageHandler;
+
     public CollabSessionController(String docId, String title, String userId, boolean isEditor) {
         this.docId = docId;
         this.userId = userId;
@@ -235,6 +239,7 @@ public class CollabSessionController {
     }
 
     private void setupEventHandlers() {
+
         backBtn.setOnAction(e -> {
             if (stompClient != null) {
                 stompClient.disconnect();
@@ -246,7 +251,7 @@ public class CollabSessionController {
         shareBtn.setOnAction(e -> showShareDialog());
 
         textArea.textProperty().addListener((obs, oldText, newText) -> {
-            if (stompClient == null || !textArea.isEditable()) return;
+            if (stompClient == null || !textArea.isEditable() || isApplyingRemoteUpdate) return;  // Skip if flag is true
 
             int changePos = findChangePosition(oldText, newText);
             if (changePos >= 0) {
@@ -258,12 +263,12 @@ public class CollabSessionController {
                     sendMessage("/app/document/" + docId + "/insert", req);
                 } else if (oldText.length() > newText.length()) {
                     DeleteRequest req = new DeleteRequest(userId, changePos);
-
                     System.out.println("is deleted");
                     sendMessage("/app/document/" + docId + "/delete", req);
                 }
             }
         });
+
 
         textArea.caretPositionProperty().addListener((obs, oldPos, newPos) -> {
             if (stompClient == null || !textArea.isEditable()) return;
@@ -379,7 +384,7 @@ public class CollabSessionController {
             System.out.println("Active Users: " + crdtNode.get("activeUsers").asText());
             System.out.println("Text: " + crdtNode.get("text").asText());
 
-// أطبع الـ cursors كلها
+
             System.out.println("All Cursors:");
             for (JsonNode cursorNode : crdtNode.get("allCursors")) {
                 System.out.println("  Cursor => userId: " + cursorNode.get("userId").asText() +
@@ -558,6 +563,7 @@ public class CollabSessionController {
                     () -> updateConnectionStatus(false)
             );
 
+            this.messageHandler = this::handleServerMessage;
             stompClient.connect();
 
             // Send initial connection message
@@ -592,8 +598,12 @@ public class CollabSessionController {
             if (msg.contains("\"operationType\"")) {
                 DocumentStateResponse resp = objectMapper.readValue(msg, DocumentStateResponse.class);
                 Platform.runLater(() -> {
-                    if (!textArea.getText().equals(resp.getText())) {
+                    if (!isApplyingRemoteUpdate && !textArea.getText().equals(resp.getText())) {
+                        isApplyingRemoteUpdate = true; // Prevent triggering the listener
+
                         textArea.setText(resp.getText());
+
+                        isApplyingRemoteUpdate = false; // Re-enable the listener
                     }
                     visualizeRemoteCursors();
                 });
@@ -618,6 +628,7 @@ public class CollabSessionController {
             System.err.println("Error processing server message: " + e.getMessage());
         }
     }
+
 
     private void updateActiveUsers(String userId, String color) {
         // Store user in our map
@@ -728,6 +739,13 @@ public class CollabSessionController {
         return root;
     }
 
+    public boolean isApplyingRemoteUpdate() {
+        return isApplyingRemoteUpdate;
+    }
+
+    public void setApplyingRemoteUpdate(boolean applyingRemoteUpdate) {
+        isApplyingRemoteUpdate = applyingRemoteUpdate;
+    }
 
 
     private static class UserListResponse {

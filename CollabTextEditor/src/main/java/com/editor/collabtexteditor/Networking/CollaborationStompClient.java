@@ -2,6 +2,8 @@ package com.editor.collabtexteditor.Networking;
 
 import com.editor.collabtexteditor.model.CursorResponse;
 import com.editor.collabtexteditor.model.DocumentStateResponse;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
 import org.springframework.messaging.simp.stomp.*;
 import org.springframework.web.socket.client.WebSocketClient;
@@ -25,6 +27,8 @@ public class CollaborationStompClient {
     private final Consumer<String> messageHandler;
     private final Runnable connectionClosedHandler;
     private final String docId;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
 
     public CollaborationStompClient(String serverUrl,
                                     String docId,
@@ -47,6 +51,9 @@ public class CollaborationStompClient {
         this.stompSession = stompClient.connect(serverUrl, new StompSessionHandler() {
             @Override
             public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
+                System.out.println("[WebSocket] Connected to server");
+
+                // Subscribe to real-time updates
                 session.subscribe("/topic/document/" + docId + "/state", new DocumentUpdateHandler());
                 session.subscribe("/topic/document/" + docId + "/cursors", new CursorUpdateHandler());
             }
@@ -59,7 +66,8 @@ public class CollaborationStompClient {
 
             @Override
             public void handleTransportError(StompSession session, Throwable exception) {
-                connectionClosedHandler.run();
+                System.err.println("[WebSocket] Transport error: " + exception.getMessage());
+                connectionClosedHandler.run(); // Optionally reconnect or notify user
             }
 
             @Override
@@ -96,9 +104,15 @@ public class CollaborationStompClient {
 
         @Override
         public void handleFrame(StompHeaders headers, Object payload) {
-            messageHandler.accept(payload.toString());
+            try {
+                String json = objectMapper.writeValueAsString(payload);
+                messageHandler.accept(json);
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
         }
     }
+
 
     private class CursorUpdateHandler implements StompFrameHandler {
         @Override
@@ -108,9 +122,15 @@ public class CollaborationStompClient {
 
         @Override
         public void handleFrame(StompHeaders headers, Object payload) {
-            messageHandler.accept(payload.toString());
+            try {
+                String json = objectMapper.writeValueAsString(payload);
+                messageHandler.accept(json);
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
         }
     }
+
 
     public boolean isConnected() {
         return stompSession != null && stompSession.isConnected();
