@@ -62,21 +62,26 @@ public class DocumentController {
             @RequestParam("file") MultipartFile file) {
 
         try {
+            System.out.println("Import request received - User: " + userId +
+                    ", Title: " + title +
+                    ", File size: " + file.getSize());
+
             if (file.isEmpty()) {
                 return ResponseEntity.badRequest().body("File is empty");
             }
 
             String content = new String(file.getBytes(), StandardCharsets.UTF_8);
-
+            System.out.println("File content length: " + content.length());
             // Create and save document with CRDT operations
             Document document = documentService.importDocument(
                     userId, title, editorCode, viewerCode, content);
-
+            System.out.println("Document created with ID: " + document.getId());
             return ResponseEntity.ok(Map.of(
                     "id", document.getId(),
                     "title", document.getTitle()
             ));
         } catch (Exception e) {
+            System.err.println("Error during import:");
             return ResponseEntity.badRequest()
                     .body("Import failed: " + e.getMessage());
         }

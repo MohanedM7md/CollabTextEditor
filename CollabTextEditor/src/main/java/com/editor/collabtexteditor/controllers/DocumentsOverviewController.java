@@ -12,8 +12,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.FileChooser;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -24,11 +23,12 @@ import java.nio.file.Path;
 import java.util.*;
 
 import static com.editor.collabtexteditor.Configs.API_URL;
-
 public class DocumentsOverviewController {
     private final BorderPane root = new BorderPane();
     private final String generatedUserId = UUID.randomUUID().toString().substring(0, 3);
     private final Button importBtn = new Button("Import");
+
+    private static final String BOUNDARY = UUID.randomUUID().toString();
     public DocumentsOverviewController() {
         initializeUI();
         fetchDocuments();
@@ -384,6 +384,7 @@ public class DocumentsOverviewController {
         loadingDialog.getDialogPane().setContent(progress);
         loadingDialog.getDialogPane().getButtonTypes().clear();
         loadingDialog.show();
+        loadingDialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
         System.out.println("[DEBUG] Showing loading dialog");
 
         try {
@@ -393,18 +394,10 @@ public class DocumentsOverviewController {
 
             // Create multipart request
             System.out.println("[DEBUG] Creating multipart request");
-            HttpRequest request = HttpRequest.newBuilder()
+             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
-                    .header("Content-Type", "multipart/form-data")
-                    .POST(ofMimeMultipartData(
-                            Map.of(
-                                    "userId", userId,
-                                    "title", title,
-                                    "editorCode", editorCode,
-                                    "viewerCode", viewerCode
-                            ),
-                            file.toPath()
-                    ))
+                    .header("Content-Type", "multipart/form-data; boundary=" + BOUNDARY)
+                    .POST(createMultipartBody(userId, title, editorCode, viewerCode, file))
                     .build();
             System.out.println("[DEBUG] Request created successfully");
 
@@ -444,7 +437,7 @@ public class DocumentsOverviewController {
                         System.out.println("[ERROR] Exception during request: " + e.getMessage());
                         e.printStackTrace();
                         Platform.runLater(() -> {
-                            loadingDialog.close();
+
                             showErrorDialog("Import error: " + e.getMessage());
                         });
                         return null;
@@ -454,6 +447,8 @@ public class DocumentsOverviewController {
             e.printStackTrace();
             loadingDialog.close();
             showErrorDialog("Error preparing request: " + e.getMessage());
+        }finally {
+            loadingDialog.close();
         }
     }
 
@@ -486,6 +481,40 @@ public class DocumentsOverviewController {
         byteArrays.add(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
 
         return HttpRequest.BodyPublishers.ofByteArrays(byteArrays);
+    }
+
+    private HttpRequest.BodyPublisher createMultipartBody(String userId, String title,
+                                                          String editorCode, String viewerCode, File file) throws IOException {
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        PrintWriter writer = new PrintWriter(new OutputStreamWriter(byteArrayOutputStream, StandardCharsets.UTF_8), true);
+
+        // Add text parts
+        addFormField(writer, "userId", userId);
+        addFormField(writer, "title", title);
+        addFormField(writer, "editorCode", editorCode);
+        addFormField(writer, "viewerCode", viewerCode);
+
+        // Add file part
+        writer.append("--").append(BOUNDARY).append("\r\n");
+        writer.append("Content-Disposition: form-data; name=\"file\"; filename=\"").append(file.getName()).append("\"\r\n");
+        writer.append("Content-Type: text/plain\r\n\r\n");
+        writer.flush();
+
+        Files.copy(file.toPath(), byteArrayOutputStream);
+        writer.append("\r\n");
+
+        // End boundary
+        writer.append("--").append(BOUNDARY).append("--\r\n");
+        writer.flush();
+
+        return HttpRequest.BodyPublishers.ofByteArray(byteArrayOutputStream.toByteArray());
+    }
+
+    private void addFormField(PrintWriter writer, String name, String value) {
+        writer.append("--").append(BOUNDARY).append("\r\n");
+        writer.append("Content-Disposition: form-data; name=\"").append(name).append("\"\r\n\r\n");
+        writer.append(value).append("\r\n");
+        writer.flush();
     }
 
     public BorderPane getRoot() {

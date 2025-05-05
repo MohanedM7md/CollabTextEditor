@@ -165,7 +165,7 @@ public class CRDTDocument {
         // Special case: insert at the beginning
         if (position == 0) {
             System.out.println("Inserting at beginning (before " + itemList.getFirst() + ")");
-            return createItemBefore(value, itemList.getFirst(), userId);
+            return createItemAtZero(value, itemList.getFirst(), userId);
         }
 
         // Special case: insert at the end
@@ -226,6 +226,19 @@ public class CRDTDocument {
             System.out.println("Path would not sort correctly - falling back to createItemBefore");
             return createItemBefore(value, after, userId);
         }
+    }
+
+    private CharItem createItemAtZero(char value, CharItem existing, String userId) {
+        System.out.println("[createItemAtZero] Creating '" + value + "' before " + existing);
+        List<Integer> newPath = new ArrayList<>(existing.getPath());
+
+        int lastIdx = newPath.size() - 1;
+        newPath.set(lastIdx, newPath.get(lastIdx) - 1);
+
+        CharItem newItem = new CharItem(value, userId);
+        newItem.setPath(newPath);
+        System.out.println("Created item: " + newItem + " with path " + newPath);
+        return newItem;
     }
 
     public void applyOperation(Operation op) {

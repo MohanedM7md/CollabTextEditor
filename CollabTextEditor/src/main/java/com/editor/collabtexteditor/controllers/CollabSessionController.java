@@ -45,7 +45,7 @@ public class CollabSessionController {
     private final Button undoBtn = new Button("Undo");
     private final Button redoBtn = new Button("Redo");
     private final Button shareBtn = new Button("Share");
-    private final Button importBtn = new Button("Import");
+
     private final Button exportBtn = new Button("Export");
     private final Label docInfoLabel = new Label();
     private final ProgressIndicator loadingIndicator = new ProgressIndicator();
@@ -156,7 +156,7 @@ public class CollabSessionController {
         shareBtn.setStyle(buttonStyle.replace("#007BFF", "#28A745"));
         undoBtn.setStyle(buttonStyle);
         redoBtn.setStyle(buttonStyle);
-        importBtn.setStyle(buttonStyle.replace("#007BFF", "#17A2B8"));  // Blue-green
+
         exportBtn.setStyle(buttonStyle.replace("#007BFF", "#FFC107")); // Amber
 
 
@@ -240,7 +240,7 @@ public class CollabSessionController {
                 shareBtn,
                 undoBtn,
                 redoBtn,
-                importBtn,
+
                 exportBtn,
                 separator,
                 metadataHeader,
@@ -306,16 +306,7 @@ public class CollabSessionController {
             if (stompClient == null) return;
             sendMessage("/app/document/" + docId + "/redo", new RedoRequest(userId));
         });
-        importBtn.setOnAction(e -> {
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Import Text File");
-            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
-            File selectedFile = fileChooser.showOpenDialog(root.getScene().getWindow());
 
-            if (selectedFile != null) {
-                importDocument(selectedFile);
-            }
-        });
 
 
         exportBtn.setOnAction(e -> {
@@ -340,9 +331,6 @@ public class CollabSessionController {
         });
 
 
-
-
-        // Add hover effects for buttons
         setupButtonHoverEffect(shareBtn, "#28A745", "#218838");
         setupButtonHoverEffect(undoBtn, "#007BFF", "#0069D9");
         setupButtonHoverEffect(redoBtn, "#007BFF", "#0069D9");
@@ -360,33 +348,7 @@ public class CollabSessionController {
             button.setStyle(style);
         });
     }
-    private void importDocument(File file) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(API_URL + "documents/" + docId + "/import?userId=" + userId))
-                    .timeout(Duration.ofSeconds(15))
-                    .header("Content-Type", "multipart/form-data; boundary=---011000010111000001101001")
-                    .POST(ofFileMultipart(file))
-                    .build();
 
-            httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenAccept(response -> {
-                        if (response.statusCode() == 200) {
-                            Platform.runLater(() -> {
-                                statusLabel.setText("Import successful.");
-                                statusLabel.setStyle("-fx-text-fill: green;");
-                            });
-                        } else {
-                            Platform.runLater(() -> {
-                                statusLabel.setText("Import failed: " + response.body());
-                                statusLabel.setStyle("-fx-text-fill: red;");
-                            });
-                        }
-                    });
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
     private static HttpRequest.BodyPublisher ofFileMultipart(File file) throws IOException {
         String boundary = "---011000010111000001101001";
         var byteArrays = new ArrayList<byte[]>();
@@ -501,7 +463,7 @@ public class CollabSessionController {
                 // Update UI with document info
                 docInfoLabel.setText(documentTitle);
 
-                VBox docMetadataBox = (VBox) rightBar.getChildren().get(8);
+                VBox docMetadataBox = (VBox) rightBar.getChildren().get(7);
                 ((Label) docMetadataBox.getChildren().get(0)).setText(documentTitle);
                 ((Label) docMetadataBox.getChildren().get(1)).setText("Creator: " + documentCreator);
                 ((Label) docMetadataBox.getChildren().get(2)).setText("Modified: " + lastModified);
