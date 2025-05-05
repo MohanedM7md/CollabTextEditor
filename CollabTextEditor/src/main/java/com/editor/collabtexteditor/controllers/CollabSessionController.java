@@ -8,10 +8,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
+import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import lombok.Getter;
 
@@ -25,9 +30,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -62,7 +65,8 @@ public class CollabSessionController {
     private final Map<String, String> activeUsers = new ConcurrentHashMap<>();
     private boolean isApplyingRemoteUpdate = false;
     private boolean isApplyingRemoteCursor = false;
-
+    private final Pane overlayPane = new Pane();
+    private final Map<String, Circle> cursorIndicators = new ConcurrentHashMap<>();
     // For REST API calls
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -75,6 +79,8 @@ public class CollabSessionController {
     private String viewerCode = "";
     private String editorCode = "";
     private Consumer<String> messageHandler;
+    Rectangle test = new Rectangle(2, 18, Color.RED);
+
 
     public CollabSessionController(String docId, String title, String userId, boolean isEditor) {
         this.docId = docId;
@@ -254,6 +260,14 @@ public class CollabSessionController {
         root.setTop(sessionBar);
         root.setCenter(centerBox);
         root.setRight(rightBar);
+
+        overlayPane.setMouseTransparent(true); // Allow clicks to pass through
+        overlayPane.setStyle("-fx-background-color: transparent;");
+        overlayPane.prefWidthProperty().bind(textArea.widthProperty());
+        overlayPane.prefHeightProperty().bind(textArea.heightProperty());
+
+        // Add to root (make sure textArea is added first)
+        root.getChildren().addAll(textArea, overlayPane);
     }
 
     private void setupEventHandlers() {
@@ -673,15 +687,27 @@ public class CollabSessionController {
                     }
                     visualizeRemoteCursors();
                 });
-            } else if (msg.contains("\"userId\"") && msg.contains("\"position\"")) {
+            }else if (msg.contains("\"userId\"") && msg.contains("\"position\"")) {
                 CursorResponse resp = objectMapper.readValue(msg, CursorResponse.class);
+                System.out.println("[CURSOR] Received cursor update:");
+                System.out.println("  User ID: " + resp.getUserId());
+                System.out.println("  Position: " + resp.getPosition());
+                System.out.println("  Color: " + resp.getColor());
+                System.out.println("  Is current user? " + resp.getUserId().equals(userId));
+
                 Platform.runLater(() -> {
                     if (!resp.getUserId().equals(userId)) {
+                        System.out.println("[CURSOR] Storing remote cursor:");
+                        System.out.println("  Adding to remoteCursors: " + resp.getUserId() + " -> " + resp.getPosition());
+                        System.out.println("  Adding to cursorColors: " + resp.getUserId() + " -> " + resp.getColor());
+
                         remoteCursors.put(resp.getUserId(), resp.getPosition());
+                        cursorColors.put(resp.getUserId(), resp.getColor());
+                        updateActiveUsers(resp.getUserId(), resp.getColor(), true);
+                        visualizeRemoteCursors();
+                    } else {
+                        System.out.println("[CURSOR] Ignoring own cursor update");
                     }
-                    cursorColors.put(resp.getUserId(), resp.getColor());
-                    updateActiveUsers(resp.getUserId(), resp.getColor(),true);
-                    visualizeRemoteCursors();
                 });
             } else if (msg.contains("\"eventType\"")) {
                 UserConnWectionEvent event = objectMapper.readValue(msg, UserConnWectionEvent.class);
@@ -741,27 +767,84 @@ public class CollabSessionController {
     }
 
     private void visualizeRemoteCursors() {
-        // Note: This is a simplified version, for better cursor visualization
-        // consider using a rich text component like RichTextFX
-        StringBuilder styleBuilder = new StringBuilder();
-        styleBuilder.append("-fx-highlight-fill: #FFFACD;"); // Default highlight color
+        System.out.println("[VISUALIZE] Updating cursor indicators");
 
+        // Clear existing indicators for users who disconnected
+        Set<String> currentUsers = new HashSet<>(remoteCursors.keySet());
+        cursorIndicators.keySet().removeIf(userId -> !currentUsers.contains(userId));
+
+        // Get text metrics
+        Font font = textArea.getFont();
+        Text helperText = new Text();
+        helperText.setFont(font);
+
+        // Calculate exact line height
+        helperText.setText("X");
+        double lineHeight = helperText.getLayoutBounds().getHeight() * 1.2; // Add some spacing
+
+        // Calculate average character width
+        double charWidth = computeAverageCharWidth(font);
+
+        // Get text area layout information
+        Insets padding = textArea.getPadding();
+        double startY = padding.getTop();
+
+        // Update or create indicators for active users
         for (Map.Entry<String, Integer> entry : remoteCursors.entrySet()) {
-            if (!entry.getKey().equals(userId)) {
-                String color = cursorColors.getOrDefault(entry.getKey(), "#FF0000");
-                int position = entry.getValue();
+            String userId = entry.getKey();
+            int position = entry.getValue();
+            String color = cursorColors.getOrDefault(userId, "#FF0000");
 
-                // This is a simplified approach to visualize cursors
-                // A more advanced implementation would use custom text highlighting
-                styleBuilder.append(String.format(
-                        "-fx-background-color: %s33; ", // Add transparency
-                        color
-                ));
+            if (!userId.equals(this.userId)) {
+                // Calculate screen position from text position
+                Point2D location = estimateCursorPosition(position, charWidth, lineHeight, startY);
+
+                // Get or create the indicator
+                Circle indicator = cursorIndicators.computeIfAbsent(userId, k -> {
+                    Circle circle = new Circle(0, 0, 5);
+                    circle.setMouseTransparent(true);
+                    overlayPane.getChildren().add(circle);
+                    return circle;
+                });
+
+                // Update indicator properties
+                indicator.setFill(Color.web(color));
+                indicator.setLayoutX(location.getX()+25);
+                indicator.setLayoutY(location.getY() +70);
+
+                System.out.printf("  User %s: pos=%d, x=%.1f, y=%.1f%n",
+                        userId, position, location.getX(), location.getY());
             }
         }
-
-        textArea.setStyle(styleBuilder.toString());
     }
+
+    private Point2D estimateCursorPosition(int textPosition, double charWidth, double lineHeight, double startY) {
+        String text = textArea.getText();
+        if (textPosition > text.length()) {
+            textPosition = text.length();
+        }
+
+        // Calculate row and column
+        String textBefore = text.substring(0, textPosition);
+        String[] lines = textBefore.split("\n", -1);
+        int row = lines.length - 1;
+        int column = textPosition - (textBefore.lastIndexOf('\n') + 1);
+
+        // Calculate position with proper padding
+        double x = column * charWidth + textArea.getPadding().getLeft() + 2; // Small offset
+        double y = startY + (row * lineHeight) + (lineHeight * 0.8); // Position near baseline
+
+        return new Point2D(x, y);
+    }
+
+    private double computeAverageCharWidth(Font font) {
+        // Compute approximate character width
+        Text sampleText = new Text("X"); // Use 'X' as average width proxy
+        sampleText.setFont(font);
+        return sampleText.getLayoutBounds().getWidth();
+    }
+
+
 
     private void updateConnectionStatus(boolean connected) {
         Platform.runLater(() -> {
