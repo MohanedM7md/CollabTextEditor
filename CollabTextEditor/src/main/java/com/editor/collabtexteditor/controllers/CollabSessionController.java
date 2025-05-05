@@ -261,6 +261,8 @@ public class CollabSessionController {
         backBtn.setOnAction(e -> {
             if (stompClient != null) {
                 stompClient.disconnect();
+                ConnectRequest req=new ConnectRequest();
+                sendMessage("/app/document/" + docId + "/disconnect", req);
             }
             DocumentsOverviewController overviewController = new DocumentsOverviewController();
             root.getScene().setRoot(overviewController.getRoot());
@@ -646,7 +648,7 @@ public class CollabSessionController {
         dialog.showAndWait();
     }
 
-    // In your CollabSessionController
+
     private void connectToSession() {
         try {
             String wsUrl = "ws://localhost:8080/ws";

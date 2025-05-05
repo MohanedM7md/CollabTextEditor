@@ -231,22 +231,36 @@ public class CRDTDocument {
     }
 
     public void redo(String userId) {
-        if (!userOperationHistory.containsKey(userId) ||
-                userHistoryPointers.get(userId) >= userOperationHistory.get(userId).size() - 1) {
-            System.out.println("Nothing to redo for user " + userId);
+        if (!userOperationHistory.containsKey(userId)) {
+            System.out.println("No history for user " + userId);
             return;
         }
 
         List<Operation> history = userOperationHistory.get(userId);
-        int pointer = userHistoryPointers.get(userId) + 1;
+        int pointer = userHistoryPointers.getOrDefault(userId, -1);
 
-        Operation op = history.get(pointer);
-        op.apply(this);
+        // Check if redo is possible
+        if (pointer + 1 >= history.size()) {
+            System.out.println("Nothing to redo for user " + userId);
+            return;
+        }
 
-        userHistoryPointers.put(userId, pointer);
-        System.out.println("Redo: " + op.getClass().getSimpleName() +
-                " for user " + userId);
+        // Redo the next operation in history
+        Operation op = history.get(pointer + 1);
+
+        // Here we get the inverse of the inverse (i.e., the original operation)
+        Operation redoOp = op.getInverse() != null ? op.getInverse().getInverse() : null;
+
+        if (redoOp != null) {
+            redoOp.apply(this);
+            userHistoryPointers.put(userId, pointer + 1);
+            System.out.println("Redo: " + redoOp.getClass().getSimpleName() + " for user " + userId);
+        } else {
+            System.out.println("Cannot redo: inverse operation not available.");
+        }
     }
+
+
 
     public String getActiveUsers() {
         return activeUsers.toString();

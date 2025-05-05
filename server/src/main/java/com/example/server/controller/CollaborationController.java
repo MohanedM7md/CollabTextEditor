@@ -68,7 +68,7 @@ public class CollaborationController {
 
     @MessageMapping("/document/{docId}/redo")
     public void handleRedo(@DestinationVariable String docId,
-                           @Payload UndoRequest request) {
+                           @Payload RedoRequest request) {
         DocumentStateResponse response = collaborationService.handleRedo(docId, request);
         messagingTemplate.convertAndSend("/topic/document/" + docId + "/state", response);
 
@@ -80,4 +80,18 @@ public class CollaborationController {
         messagingTemplate.convertAndSend("/topic/document/" + request.getShareCode() + "/user-joined",
                 new ConnectRequest());
     }
+
+    @MessageMapping("/document/{docId}/disconnect")
+    public void handleDisconnect(@DestinationVariable String docId ,@Payload ConnectRequest request) {
+        System.out.println("Disconnect request: user=" + request.getUserId() + ", shareCode=" + request.getShareCode());
+
+        // You can optionally remove the user from internal tracking here
+        DocumentStateResponse response = collaborationService.handleDisconnect(docId, request);
+        // Notify others that the user has left
+        messagingTemplate.convertAndSend("/topic/document/" + request.getShareCode() + "/user-left",
+                response);
+    }
+
+
+
 }

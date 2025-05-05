@@ -4,6 +4,7 @@ import com.editor.collabtexteditor.model.CursorResponse;
 import com.editor.collabtexteditor.model.DocumentStateResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import javafx.application.Platform;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
 import org.springframework.messaging.simp.stomp.*;
 import org.springframework.web.socket.client.WebSocketClient;
@@ -58,6 +59,7 @@ public class CollaborationStompClient {
                 // Subscribe to real-time updates
                 session.subscribe("/topic/document/" + docId + "/state", new DocumentUpdateHandler());
                 session.subscribe("/topic/document/" + docId + "/cursors", new CursorUpdateHandler());
+                session.subscribe("/topic/document/" + docId + "/user-left", new DocumentUpdateHandler());
             }
 
             @Override
@@ -83,6 +85,7 @@ public class CollaborationStompClient {
             }
         }).get(10, TimeUnit.SECONDS);
     }
+
 
     public void send(String destination, Object payload) {
         if (stompSession != null && stompSession.isConnected()) {

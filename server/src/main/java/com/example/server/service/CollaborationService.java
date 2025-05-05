@@ -1,9 +1,6 @@
 package com.example.server.service;
 import com.example.server.CRDT.CRDTDocument;
-import com.example.server.dto.requests.CursorUpdateRequest;
-import com.example.server.dto.requests.DeleteRequest;
-import com.example.server.dto.requests.InsertRequest;
-import com.example.server.dto.requests.UndoRequest;
+import com.example.server.dto.requests.*;
 import com.example.server.dto.responses.CursorResponse;
 import com.example.server.dto.responses.DocumentStateResponse;
 import org.springframework.stereotype.Service;
@@ -12,11 +9,9 @@ import org.springframework.stereotype.Service;
 public class CollaborationService {
 
     private final DocumentService documentService;
-    private final SessionRegistry sessionRegistry;
 
     public CollaborationService(DocumentService documentService, SessionRegistry sessionRegistry) {
         this.documentService = documentService;
-        this.sessionRegistry = sessionRegistry;
     }
 
     public DocumentStateResponse handleInsert(String docId, InsertRequest request) {
@@ -60,11 +55,20 @@ public class CollaborationService {
         }).orElseThrow(() -> new RuntimeException("Document not found"));
     }
 
-    public DocumentStateResponse handleRedo(String docId, UndoRequest request) {
+    public DocumentStateResponse handleRedo(String docId, RedoRequest request) {
         return documentService.findById(docId).map(document -> {
             CRDTDocument crdt = document.getCrdtDocument();
             crdt.redo(request.getUserId());
-            return crdt.getCurrentState("UNDO", request.getUserId());
+            return crdt.getCurrentState("REDO", request.getUserId());
         }).orElseThrow(() -> new RuntimeException("Document not found"));
     }
+
+    public DocumentStateResponse handleDisconnect(String docId, ConnectRequest request) {
+        return documentService.findById(docId).map(document -> {
+            CRDTDocument crdt = document.getCrdtDocument();
+            crdt.removeUser(request.getUserId());  // You'll need to implement this in CRDTDocument
+            return crdt.getCurrentState("Remove", request.getUserId());
+        }).orElseThrow(() -> new RuntimeException("Document not found"));
+    }
+
 }
