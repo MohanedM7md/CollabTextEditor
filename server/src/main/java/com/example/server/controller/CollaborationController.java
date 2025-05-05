@@ -74,24 +74,28 @@ public class CollaborationController {
 
     }
 
-    @MessageMapping("/document/connect")
-    public void handleConnect(@Payload ConnectRequest request) {
-        System.out.println("Connect request: user=" + request.getUserId() + ", shareCode=" + request.getShareCode());
-        messagingTemplate.convertAndSend("/topic/document/" + request.getShareCode() + "/user-joined",
-                new ConnectRequest());
+    @MessageMapping("/document/{docId}/connect")
+    public void handleConnect(@DestinationVariable String docId,@Payload ConnectRequest request) {
+        System.out.println("Connect request: user=" + request.getUserId());
+        String userId = request.getUserId();
+        boolean isEditor = request.isEditor();
+        collaborationService.handleConnect(docId, request);
+        messagingTemplate.convertAndSend("/topic/document/" + docId + "/user-joined",
+                new ConnectRequest(userId,isEditor));
     }
 
     @MessageMapping("/document/{docId}/disconnect")
-    public void handleDisconnect(@DestinationVariable String docId ,@Payload ConnectRequest request) {
-        System.out.println("Disconnect request: user=" + request.getUserId() + ", shareCode=" + request.getShareCode());
-
-        // You can optionally remove the user from internal tracking here
-        DocumentStateResponse response = collaborationService.handleDisconnect(docId, request);
-        // Notify others that the user has left
-        messagingTemplate.convertAndSend("/topic/document/" + request.getShareCode() + "/user-left",
-                response);
+    public void handleDisconnect(@DestinationVariable String docId, @Payload ConnectRequest request) {
+        System.out.println("Disconnect request: user=" + request.getUserId() + " for doc=" + docId);
+        try {
+            collaborationService.handleDisconnect(docId, request);
+            messagingTemplate.convertAndSend("/topic/document/" + docId + "/user-left",
+                    new ConnectRequest(request.getUserId(), request.isEditor()));
+        } catch (RuntimeException e) {
+            System.out.println("Error handling disconnect: " + e.getMessage());
+            messagingTemplate.convertAndSend("/topic/document/" + docId + "/user-left",
+                    new ConnectRequest(request.getUserId(), request.isEditor()));
+        }
     }
-
-
 
 }

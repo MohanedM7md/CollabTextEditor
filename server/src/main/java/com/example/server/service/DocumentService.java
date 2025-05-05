@@ -5,6 +5,8 @@ import com.example.server.repository.DocumentRepository;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -56,5 +58,13 @@ public class DocumentService {
                 .stream()
                 .map(Document::getTitle)
                 .collect(Collectors.toList());
+    }
+    public Document importDocument(String ownerId, String title, String editorCode,
+                                   String viewerCode, String content ) throws IOException {
+        // Create new document
+        Document doc = new Document(ownerId, editorCode, viewerCode, title);
+        doc.importFromString(content,ownerId);
+        repository.save(doc);
+        return doc;
     }
 }

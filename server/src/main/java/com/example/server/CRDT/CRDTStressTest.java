@@ -62,15 +62,11 @@ public class CRDTStressTest {
             System.err.println("Export failed: " + e.getMessage());
         }
 
-        try {
-            Document importedDoc = new Document("importTester","tgtgt","y56trg","565");
-            importedDoc.importFromTextFile(new File("crdt_output.txt"), "importTester");
-            System.out.println("\n=== IMPORTED DOCUMENT ===");
-            System.out.println("Imported doc ID"+ importedDoc.getId());
-            printDocumentState(importedDoc.getCrdtDocument(), "IMPORTED STATE");
-        } catch (IOException e) {
-            System.err.println("Import failed: " + e.getMessage());
-        }
+        Document importedDoc = new Document("importTester","tgtgt","y56trg","565");
+        // importedDoc.importFromString(new File("crdt_output.txt"), "importTester");
+        System.out.println("\n=== IMPORTED DOCUMENT ===");
+        System.out.println("Imported doc ID"+ importedDoc.getId());
+        printDocumentState(importedDoc.getCrdtDocument(), "IMPORTED STATE");
     }
 
 

@@ -63,12 +63,30 @@ public class CollaborationService {
         }).orElseThrow(() -> new RuntimeException("Document not found"));
     }
 
-    public DocumentStateResponse handleDisconnect(String docId, ConnectRequest request) {
-        return documentService.findById(docId).map(document -> {
+    public void handleDisconnect(String docId, ConnectRequest request) {
+        documentService.findById(docId).ifPresent(document -> {
+            // Remove user from CRDT document
             CRDTDocument crdt = document.getCrdtDocument();
-            crdt.removeUser(request.getUserId());  // You'll need to implement this in CRDTDocument
-            return crdt.getCurrentState("Remove", request.getUserId());
-        }).orElseThrow(() -> new RuntimeException("Document not found"));
+            crdt.removeUser(request.getUserId());
+
+            // Save the updated document
+            document.setCrdtDocument(crdt);
+            documentService.save(document);
+
+            // Log the disconnection
+            System.out.printf("User %s disconnected from document %s%n",
+                    request.getUserId(), docId);
+        });
     }
+    public void handleConnect(String docId, ConnectRequest request) {
+        documentService.findById(docId).ifPresent(document -> {
+            CRDTDocument crdt = document.getCrdtDocument();
+            if(request.isEditor())
+                crdt.addEditor(request.getUserId());
+            else
+                crdt.addViewer(request.getUserId());
+        });
+    }
+
 
 }

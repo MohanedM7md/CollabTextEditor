@@ -9,9 +9,11 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/documents")
@@ -51,30 +53,37 @@ public class DocumentController {
     }
 
 
-    @PostMapping("/{id}/import")
-    public ResponseEntity<String> importText(
-            @PathVariable String id,
-            @RequestParam("file") MultipartFile file,
-            @RequestParam("userId") String userId
-    ) {
+    @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> importDocument(
+            @RequestParam("userId") String userId,
+            @RequestParam("title") String title,
+            @RequestParam("editorCode") String editorCode,
+            @RequestParam("viewerCode") String viewerCode,
+            @RequestParam("file") MultipartFile file) {
+
         try {
-            Document document = documentService.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Document not found"));
+            if (file.isEmpty()) {
+                return ResponseEntity.badRequest().body("File is empty");
+            }
 
-            File tempFile = File.createTempFile("upload_", ".txt");
-            file.transferTo(tempFile);
+            String content = new String(file.getBytes(), StandardCharsets.UTF_8);
 
-            document.importFromTextFile(tempFile, userId);
-            document.updateTimestamp();
-            documentService.save(document);
-            return ResponseEntity.ok("Import successful.");
-        } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("File I/O error: " + e.getMessage());
+            // Create and save document with CRDT operations
+            Document document = documentService.importDocument(
+                    userId, title, editorCode, viewerCode, content);
+
+            return ResponseEntity.ok(Map.of(
+                    "id", document.getId(),
+                    "title", document.getTitle()
+            ));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body("Import failed: " + e.getMessage());
         }
+    }
+
+    private String generateRandomCode() {
+        return UUID.randomUUID().toString().substring(0, 6);
     }
 
 

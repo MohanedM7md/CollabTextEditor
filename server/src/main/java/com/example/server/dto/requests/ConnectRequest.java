@@ -6,8 +6,9 @@ import lombok.Setter;
 @Getter @Setter
 public class ConnectRequest {
     private String userId;
-    private String shareCode;
-    // Optional: Add validation annotations
-    // @NotBlank
-    // @Size(min = 8, max = 8) // If your share codes are 8 characters
+    private boolean isEditor;
+    public ConnectRequest(String userId, boolean isEditor) {
+        this.userId = userId;
+        this.isEditor = isEditor;
+    }
 }

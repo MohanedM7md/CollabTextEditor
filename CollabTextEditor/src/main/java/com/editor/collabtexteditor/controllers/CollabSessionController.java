@@ -45,7 +45,7 @@ public class CollabSessionController {
     private final Button undoBtn = new Button("Undo");
     private final Button redoBtn = new Button("Redo");
     private final Button shareBtn = new Button("Share");
-    private final Button importBtn = new Button("Import");
+
     private final Button exportBtn = new Button("Export");
     private final Label docInfoLabel = new Label();
     private final ProgressIndicator loadingIndicator = new ProgressIndicator();
@@ -156,7 +156,7 @@ public class CollabSessionController {
         shareBtn.setStyle(buttonStyle.replace("#007BFF", "#28A745"));
         undoBtn.setStyle(buttonStyle);
         redoBtn.setStyle(buttonStyle);
-        importBtn.setStyle(buttonStyle.replace("#007BFF", "#17A2B8"));  // Blue-green
+
         exportBtn.setStyle(buttonStyle.replace("#007BFF", "#FFC107")); // Amber
 
 
@@ -240,7 +240,7 @@ public class CollabSessionController {
                 shareBtn,
                 undoBtn,
                 redoBtn,
-                importBtn,
+
                 exportBtn,
                 separator,
                 metadataHeader,
@@ -260,9 +260,9 @@ public class CollabSessionController {
 
         backBtn.setOnAction(e -> {
             if (stompClient != null) {
-                stompClient.disconnect();
-                ConnectRequest req=new ConnectRequest();
-                sendMessage("/app/document/" + docId + "/disconnect", req);
+                ConnectRequest req = new ConnectRequest(userId, isEditor);
+                System.out.println("Sending disconnect request: " + req);
+                stompClient.safeDisconnect("/app/document/" + docId + "/disconnect",req);
             }
             DocumentsOverviewController overviewController = new DocumentsOverviewController();
             root.getScene().setRoot(overviewController.getRoot());
@@ -306,16 +306,7 @@ public class CollabSessionController {
             if (stompClient == null) return;
             sendMessage("/app/document/" + docId + "/redo", new RedoRequest(userId));
         });
-        importBtn.setOnAction(e -> {
-            FileChooser fileChooser = new FileChooser();
-            fileChooser.setTitle("Import Text File");
-            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
-            File selectedFile = fileChooser.showOpenDialog(root.getScene().getWindow());
 
-            if (selectedFile != null) {
-                importDocument(selectedFile);
-            }
-        });
 
 
         exportBtn.setOnAction(e -> {
@@ -340,9 +331,6 @@ public class CollabSessionController {
         });
 
 
-
-
-        // Add hover effects for buttons
         setupButtonHoverEffect(shareBtn, "#28A745", "#218838");
         setupButtonHoverEffect(undoBtn, "#007BFF", "#0069D9");
         setupButtonHoverEffect(redoBtn, "#007BFF", "#0069D9");
@@ -360,33 +348,7 @@ public class CollabSessionController {
             button.setStyle(style);
         });
     }
-    private void importDocument(File file) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(API_URL + "documents/" + docId + "/import?userId=" + userId))
-                    .timeout(Duration.ofSeconds(15))
-                    .header("Content-Type", "multipart/form-data; boundary=---011000010111000001101001")
-                    .POST(ofFileMultipart(file))
-                    .build();
 
-            httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                    .thenAccept(response -> {
-                        if (response.statusCode() == 200) {
-                            Platform.runLater(() -> {
-                                statusLabel.setText("Import successful.");
-                                statusLabel.setStyle("-fx-text-fill: green;");
-                            });
-                        } else {
-                            Platform.runLater(() -> {
-                                statusLabel.setText("Import failed: " + response.body());
-                                statusLabel.setStyle("-fx-text-fill: red;");
-                            });
-                        }
-                    });
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
     private static HttpRequest.BodyPublisher ofFileMultipart(File file) throws IOException {
         String boundary = "---011000010111000001101001";
         var byteArrays = new ArrayList<byte[]>();
@@ -524,7 +486,7 @@ public class CollabSessionController {
                         String userId = cursor.getUserId();
                         remoteCursors.put(userId, cursor.getPosition());
                         cursorColors.put(userId, cursor.getColor());
-                        updateActiveUsers(userId, cursor.getColor());
+                        updateActiveUsers(userId, cursor.getColor(),true);
                     }
 
                     // Visualize the cursors
@@ -662,9 +624,8 @@ public class CollabSessionController {
             this.messageHandler = this::handleServerMessage;
             stompClient.connect();
 
-            // Send initial connection message
-            ConnectRequest joinReq = new ConnectRequest(userId, docId);
-            stompClient.send("/app/document/connect", joinReq);
+            ConnectRequest joinReq = new ConnectRequest(userId, isEditor);
+            stompClient.send("/app/document/"+docId+"/connect", joinReq);
 
             updateConnectionStatus(true);
         } catch (Exception e) {
@@ -689,15 +650,24 @@ public class CollabSessionController {
         }
     }
 
+
     private void handleServerMessage(String msg) {
         try {
+            System.out.println("[WebSocket] Received server message: " + msg);
             if (msg.contains("\"operationType\"")) {
                 DocumentStateResponse resp = objectMapper.readValue(msg, DocumentStateResponse.class);
                 Platform.runLater(() -> {
                     if (!isApplyingRemoteUpdate && !textArea.getText().equals(resp.getText())) {
                         isApplyingRemoteUpdate = true; // Prevent triggering the listener
-
+                        int caretPosition = textArea.getCaretPosition();
                         textArea.setText(resp.getText());
+                        // Restore cursor position if possible
+                        if (caretPosition <= resp.getText().length()) {
+                            textArea.positionCaret(caretPosition);
+                        } else {
+                            // If the document is now shorter, place cursor at the end
+                            textArea.positionCaret(resp.getText().length());
+                        }
 
                         isApplyingRemoteUpdate = false; // Re-enable the listener
                     }
@@ -706,18 +676,28 @@ public class CollabSessionController {
             } else if (msg.contains("\"userId\"") && msg.contains("\"position\"")) {
                 CursorResponse resp = objectMapper.readValue(msg, CursorResponse.class);
                 Platform.runLater(() -> {
-                    remoteCursors.put(resp.getUserId(), resp.getPosition());
+                    if (!resp.getUserId().equals(userId)) {
+                        remoteCursors.put(resp.getUserId(), resp.getPosition());
+                    }
                     cursorColors.put(resp.getUserId(), resp.getColor());
-                    updateActiveUsers(resp.getUserId(), resp.getColor());
+                    updateActiveUsers(resp.getUserId(), resp.getColor(),true);
                     visualizeRemoteCursors();
                 });
-            } else if (msg.contains("\"users\"")) {
-                // Handle user list updates if server sends them
-                UserListResponse resp = objectMapper.readValue(msg, UserListResponse.class);
+            } else if (msg.contains("\"eventType\"")) {
+                UserConnWectionEvent event = objectMapper.readValue(msg, UserConnWectionEvent.class);
+                ConnectRequest request = event.getRequest();
+                String eventType = event.getEventType();
                 Platform.runLater(() -> {
-                    resp.getUsers().forEach(user -> {
-                        updateActiveUsers(user.getUserId(), user.getColor());
-                    });
+                    if ("user-joined".equals(eventType)) {
+
+                        String color = getColorForUser(request.getUserId());
+                        updateActiveUsers(request.getUserId(), color,true);
+                    } else if ("user-left".equals(eventType)) {
+                        String color = getColorForUser(request.getUserId());
+                        updateActiveUsers(request.getUserId(),color,false);
+                        remoteCursors.remove(request.getUserId());
+                        cursorColors.remove(request.getUserId());
+                    }
                 });
             }
         } catch (Exception e) {
@@ -726,11 +706,12 @@ public class CollabSessionController {
     }
 
 
-    private void updateActiveUsers(String userId, String color) {
-        // Store user in our map
-        activeUsers.put(userId, color);
+    private void updateActiveUsers(String userId, String color,boolean addOrRemove) {
+        if(addOrRemove)
+            activeUsers.put(userId, color);
+        else
+            activeUsers.remove(userId, color);
 
-        // Refresh the active users display
         Platform.runLater(() -> {
             activeUsersBox.getChildren().clear();
 
@@ -869,6 +850,7 @@ public class CollabSessionController {
         public java.util.List<UserInfo> getUsers() { return users; }
         public void setUsers(java.util.List<UserInfo> users) { this.users = users; }
     }
+
 
     private static class UserInfo {
         private String userId;

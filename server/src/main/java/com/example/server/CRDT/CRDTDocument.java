@@ -30,29 +30,37 @@ public class CRDTDocument {
     }
 
 
-    // Document modification methods
-    public synchronized void insert(char value, int position,String userId) throws IllegalStateException {
-        if (position < 0 || position > items.size()) {
+    public synchronized void insert(char value, int clientPosition, String userId) throws IllegalStateException {
+        if (!editors.contains(userId)) {
+            throw new IllegalStateException("User doesn't have edit permissions");
+        }
+
+        // Convert client position to CRDT position
+        int crdtPosition = clientToCrdtPosition(clientPosition);
+
+        if (crdtPosition < 0 || crdtPosition > items.size()) {
             throw new IndexOutOfBoundsException("Invalid insert position");
         }
-        if (!editors.contains(userId)) {
-            throw new IllegalStateException("User doesn't have edit permissions");
-        }
-        CharItem newItem = createItemAtPosition(value, position,userId);
-        applyOperation(new InsertOperation(newItem,userId));
+        System.out.println("Inserting '" + value + "' at client position " + clientPosition +
+                " (CRDT position " + crdtPosition + ")");
+        CharItem newItem = createItemAtPosition(value, crdtPosition, userId);
+        applyOperation(new InsertOperation(newItem, userId));
     }
 
-    public synchronized void delete(int position,String userId) throws IllegalStateException {
+    public synchronized void delete(int clientPosition, String userId) throws IllegalStateException {
         if (!editors.contains(userId)) {
             throw new IllegalStateException("User doesn't have edit permissions");
         }
-        if (position < 0 || position >= items.size()) return;
-        CharItem item = getItemAtPosition(position);
-        applyOperation(new DeleteOperation(item,userId));
-    }
-    public synchronized void addComment(int startPos, int endPos, String comment, String userId) throws IllegalStateException {
-        List<CharItem> affectedItems = getItemsInRange(startPos, endPos);
-        applyOperation(new CommentOperation(affectedItems, comment,userId));
+        // Convert client position to CRDT position
+        int crdtPosition = clientToCrdtPosition(clientPosition);
+
+        if (crdtPosition < 0 || crdtPosition >= items.size())
+            return;
+
+        CharItem item = getItemAtPosition(crdtPosition);
+        if (!item.isDeleted()) {
+            applyOperation(new DeleteOperation(item, userId));
+        }
     }
 
     public synchronized void addHighlight(int startPos, int endPos, String color, String userId) throws IllegalStateException {
@@ -127,57 +135,96 @@ public class CRDTDocument {
         activeUsers.remove(userId);
         cursors.remove(userId);
     }
+
+    // Private helper methods
     // Private helper methods
     private CharItem createItemAtPosition(char value, int position, String userId) {
         List<CharItem> itemList = new ArrayList<>(items.keySet());
+        System.out.println("\n[createItemAtPosition] Starting insertion of '" + value +
+                "' at position " + position + " by user " + userId);
+        System.out.println("Current document items: " + itemList);
 
         if (itemList.isEmpty()) {
+            System.out.println("Document is empty - creating first character with path [0]");
             CharItem newItem = new CharItem(value, userId);
             newItem.setPath(List.of(0));
             return newItem;
         }
 
-        if (position <= 0) {
-            return createItemBefore(value, itemList.getFirst(),userId);
+        // Adjust position if needed
+        int originalPosition = position;
+        while (position > 0 && position < itemList.size() &&
+                items.comparator().compare(getItemAtPosition(position), getItemAtPosition(position - 1)) <= 0) {
+            position--;
+        }
+        if (originalPosition != position) {
+            System.out.println("Adjusted position from " + originalPosition + " to " + position +
+                    " due to ordering constraints");
         }
 
+        // Special case: insert at the beginning
+        if (position == 0) {
+            System.out.println("Inserting at beginning (before " + itemList.getFirst() + ")");
+            return createItemBefore(value, itemList.getFirst(), userId);
+        }
+
+        // Special case: insert at the end
         if (position >= itemList.size()) {
-            return createItemAfter(value, itemList.getLast(),userId);
+            System.out.println("Inserting at end (after " + itemList.getLast() + ")");
+            return createItemAfter(value, itemList.getLast(), userId);
         }
 
-        return createItemBetween(value, itemList.get(position-1), itemList.get(position),userId);
+        // Insert between two items
+        CharItem before = itemList.get(position - 1);
+        CharItem after = itemList.get(position);
+        System.out.println("Inserting between " + before + " and " + after);
+        return createItemBetween(value, before, after, userId);
     }
 
     private CharItem createItemBefore(char value, CharItem existing, String userId) {
+        System.out.println("[createItemBefore] Creating '" + value + "' before " + existing);
         List<Integer> newPath = new ArrayList<>(existing.getPath());
         int lastIdx = newPath.size() - 1;
         newPath.set(lastIdx, newPath.get(lastIdx) + 1);
 
         CharItem newItem = new CharItem(value, userId);
         newItem.setPath(newPath);
+        System.out.println("Created item: " + newItem + " with path " + newPath);
         return newItem;
     }
 
     private CharItem createItemAfter(char value, CharItem existing, String userId) {
+        System.out.println("[createItemAfter] Creating '" + value + "' after " + existing);
         List<Integer> newPath = new ArrayList<>(existing.getPath());
         newPath.add(0);
 
         CharItem newItem = new CharItem(value, userId);
         newItem.setPath(newPath);
+        System.out.println("Created item: " + newItem + " with path " + newPath);
         return newItem;
     }
 
     private CharItem createItemBetween(char value, CharItem before, CharItem after, String userId) {
+        System.out.println("[createItemBetween] Creating '" + value + "' between " +
+                before + " and " + after);
+        List<Integer> myTest = new ArrayList<>(after.getPath());
         List<Integer> childPath = new ArrayList<>(before.getPath());
-        childPath.add(0);
+        childPath.add(myTest.getLast() - 1); // Start with max value
         CharItem testItem = new CharItem('x', "test", 0, childPath);
 
-        if (items.comparator().compare(testItem, after) < 0) {
+        System.out.println("Testing if path " + childPath + " would sort correctly");
+        int comparison = items.comparator().compare(testItem, after);
+        System.out.println("Comparison result: " + comparison +
+                " (negative means valid position)");
+
+        if (comparison < 0) {
             CharItem newItem = new CharItem(value, userId);
             newItem.setPath(childPath);
+            System.out.println("Valid between position - created item: " + newItem);
             return newItem;
         } else {
-            return createItemBefore(value, after,userId);
+            System.out.println("Path would not sort correctly - falling back to createItemBefore");
+            return createItemBefore(value, after, userId);
         }
     }
 
@@ -303,18 +350,51 @@ public class CRDTDocument {
         cursors.remove(userId);
     }
 
-    public int getClientPosition(CharItem item) {
-        int pos = 0;
-        for (CharItem current : items.keySet()) {
-            if (current.equals(item)) {
-                return current.isDeleted() ? -1 : pos; // Return -1 for deleted items
+    /**
+     * Converts a client position (visible text) to CRDT position (including deleted
+     * items)
+     */
+    public synchronized int clientToCrdtPosition(int clientPos) {
+        if (clientPos < 0)
+            return 0;
+
+        int visibleCount = 0;
+        int crdtPos = 0;
+
+        for (CharItem item : items.keySet()) {
+            if (visibleCount >= clientPos) {
+                return crdtPos;
             }
-            if (!current.isDeleted()) {
-                pos++; // Only count non-deleted items for client positions
+            if (!item.isDeleted()) {
+                visibleCount++;
             }
+            crdtPos++;
         }
-        return -1; // Item not found
+        return crdtPos;
     }
+
+    /**
+     * Converts a CRDT position to client position
+     */
+    public synchronized int crdtToClientPosition(int crdtPos) {
+        if (crdtPos < 0)
+            return 0;
+
+        int clientPos = 0;
+        int currentPos = 0;
+
+        for (CharItem item : items.keySet()) {
+            if (currentPos >= crdtPos) {
+                return clientPos;
+            }
+            if (!item.isDeleted()) {
+                clientPos++;
+            }
+            currentPos++;
+        }
+        return clientPos;
+    }
+
     public boolean canEdit(String userId) {
         return editors.contains(userId);
     }

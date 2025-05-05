@@ -68,19 +68,16 @@ public class Document {
         }
     }
 
-    public void importFromTextFile(File file, String userId) throws IOException {
-        if (crdtDocument == null) {
-            this.crdtDocument = new CRDTDocument(this.id, userId);
+    public void importFromString(String content, String userId) throws IOException {
+        if (content == null) {
+            throw new IllegalArgumentException("Content cannot be null");
         }
 
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                for (char c : line.toCharArray()) {
-                    crdtDocument.insert(c, crdtDocument.getText().length(), userId);
-                }
-                crdtDocument.insert('\n', crdtDocument.getText().length(), userId);
-            }
+        // Process each character in the string
+        for (int i = 0; i < content.length(); i++) {
+            char c = content.charAt(i);
+            crdtDocument.insert(c, crdtDocument.getText().length(), userId);
         }
     }
+    
 }

@@ -10,21 +10,25 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
+import javafx.stage.FileChooser;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
 
 import static com.editor.collabtexteditor.Configs.API_URL;
 
 public class DocumentsOverviewController {
     private final BorderPane root = new BorderPane();
     private final String generatedUserId = UUID.randomUUID().toString().substring(0, 3);
-
+    private final Button importBtn = new Button("Import");
     public DocumentsOverviewController() {
         initializeUI();
         fetchDocuments();
@@ -37,8 +41,8 @@ public class DocumentsOverviewController {
 
         Button createBtn = new Button("Create New Document");
         createBtn.setStyle("-fx-background-color: #28A745; -fx-text-fill: white;");
-
-        HBox header = new HBox(10, titleLabel, createBtn);
+        importBtn.setStyle("-fx-background-color: #17A2B8; -fx-text-fill: white;");
+        HBox header = new HBox(10, titleLabel, createBtn,importBtn);
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(20));
 
@@ -57,6 +61,7 @@ public class DocumentsOverviewController {
 
         // Event Handlers
         createBtn.setOnAction(e -> showCreateDocumentDialog());
+        importBtn.setOnAction(e -> handleImportDocument());
     }
 
     private void fetchDocuments() {
@@ -299,6 +304,188 @@ public class DocumentsOverviewController {
         CollabSessionController sessionController = new CollabSessionController(docId,title,
                 generatedUserId, mode.equals("editor"));
         root.getScene().setRoot(sessionController.getRoot());
+    }
+
+    private void handleImportDocument() {
+        System.out.println("[DEBUG] handleImportDocument() called - opening file chooser");
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Import Text File");
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
+
+        File selectedFile = fileChooser.showOpenDialog(root.getScene().getWindow());
+        System.out.println("[DEBUG] Selected file: " + (selectedFile != null ? selectedFile.getAbsolutePath() : "null"));
+
+        if (selectedFile != null) {
+            System.out.println("[DEBUG] Showing import configuration dialog");
+            Dialog<Map<String, String>> dialog = new Dialog<>();
+            dialog.setTitle("Create Document from Import");
+
+            TextField docNameField = new TextField();
+            docNameField.setPromptText("Document Name");
+            TextField userNameField = new TextField();
+            userNameField.setPromptText("Your Name");
+            String editorCode = generateRandomCode();
+            String viewerCode = generateRandomCode();
+            System.out.println("[DEBUG] Generated codes - Editor: " + editorCode + " Viewer: " + viewerCode);
+
+            VBox content = new VBox(10,
+                    new Label("Document Name:"), docNameField,
+                    new Label("Editor Code: " + editorCode),
+                    new Label("Viewer Code: " + viewerCode),
+                    new Label("Your Name:"), userNameField);
+            content.setPadding(new Insets(15));
+
+            dialog.getDialogPane().setContent(content);
+            dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+            dialog.setResultConverter(button -> {
+                System.out.println("[DEBUG] Dialog button clicked: " + button.getText());
+                if (button == ButtonType.OK) {
+                    Map<String, String> result = new HashMap<>();
+                    result.put("docName", docNameField.getText());
+                    result.put("userName", userNameField.getText());
+                    result.put("editorCode", editorCode);
+                    result.put("viewerCode", viewerCode);
+                    System.out.println("[DEBUG] Dialog results: " + result);
+                    return result;
+                }
+                return null;
+            });
+
+            dialog.showAndWait().ifPresent(inputs -> {
+                System.out.println("[DEBUG] Processing dialog inputs: " + inputs);
+                String docName = inputs.get("docName");
+                String userName = inputs.get("userName");
+                String editorCodeFinal = inputs.get("editorCode");
+                String viewerCodeFinal = inputs.get("viewerCode");
+
+                if (docName.isEmpty() || userName.isEmpty()) {
+                    System.out.println("[ERROR] Validation failed - empty docName or userName");
+                    showErrorDialog("Document name and user name are required");
+                    return;
+                }
+
+                String userId = userName + generatedUserId;
+                System.out.println("[DEBUG] Generated user ID: " + userId);
+                importDocument(userId, docName, selectedFile, editorCodeFinal, viewerCodeFinal);
+            });
+        }
+    }
+
+    private void importDocument(String userId, String title, File file, String editorCode, String viewerCode) {
+        System.out.println("[DEBUG] importDocument() called");
+        System.out.println("[DEBUG] Parameters - userId: " + userId + ", title: " + title +
+                ", file: " + file.getName() + ", editorCode: " + editorCode +
+                ", viewerCode: " + viewerCode);
+
+        // Show loading indicator
+        ProgressIndicator progress = new ProgressIndicator();
+        Dialog<Void> loadingDialog = new Dialog<>();
+        loadingDialog.getDialogPane().setContent(progress);
+        loadingDialog.getDialogPane().getButtonTypes().clear();
+        loadingDialog.show();
+        System.out.println("[DEBUG] Showing loading dialog");
+
+        try {
+            // Build URL with parameters
+            String url = API_URL + "documents/import";
+            System.out.println("[DEBUG] Target URL: " + url);
+
+            // Create multipart request
+            System.out.println("[DEBUG] Creating multipart request");
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "multipart/form-data")
+                    .POST(ofMimeMultipartData(
+                            Map.of(
+                                    "userId", userId,
+                                    "title", title,
+                                    "editorCode", editorCode,
+                                    "viewerCode", viewerCode
+                            ),
+                            file.toPath()
+                    ))
+                    .build();
+            System.out.println("[DEBUG] Request created successfully");
+
+            System.out.println("[DEBUG] Sending async request...");
+            HttpClient.newHttpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        System.out.println("[DEBUG] Received response - Status: " + response.statusCode());
+                        System.out.println("[DEBUG] Response body: " + response.body());
+
+                        Platform.runLater(() -> {
+                            loadingDialog.close();
+                            System.out.println("[DEBUG] Closed loading dialog");
+
+                            if (response.statusCode() == 200) {
+                                try {
+                                    System.out.println("[DEBUG] Parsing successful response");
+                                    ObjectMapper mapper = new ObjectMapper();
+                                    JsonNode json = mapper.readTree(response.body());
+                                    String docId = json.get("id").asText();
+                                    System.out.println("[DEBUG] Document created with ID: " + docId);
+
+                                    openDocument(title, docId, "editor");
+                                    fetchDocuments(); // Refresh the document list
+                                    System.out.println("[DEBUG] Document opened and list refreshed");
+                                } catch (Exception e) {
+                                    System.out.println("[ERROR] Error parsing response: " + e.getMessage());
+                                    e.printStackTrace();
+                                    showErrorDialog("Error parsing response: " + e.getMessage());
+                                }
+                            } else {
+                                System.out.println("[ERROR] Import failed with status: " + response.statusCode());
+                                showErrorDialog("Import failed: " + response.body());
+                            }
+                        });
+                    })
+                    .exceptionally(e -> {
+                        System.out.println("[ERROR] Exception during request: " + e.getMessage());
+                        e.printStackTrace();
+                        Platform.runLater(() -> {
+                            loadingDialog.close();
+                            showErrorDialog("Import error: " + e.getMessage());
+                        });
+                        return null;
+                    });
+        } catch (Exception e) {
+            System.out.println("[ERROR] Exception in importDocument: " + e.getMessage());
+            e.printStackTrace();
+            loadingDialog.close();
+            showErrorDialog("Error preparing request: " + e.getMessage());
+        }
+    }
+
+    private static HttpRequest.BodyPublisher ofMimeMultipartData(Map<String, String> data, Path file) throws IOException {
+        System.out.println("[DEBUG] Creating multipart form data");
+        var boundary = new StringBuilder().append("-------Java11Client").append(UUID.randomUUID()).append("-------");
+        System.out.println("[DEBUG] Generated boundary: " + boundary);
+
+        List<byte[]> byteArrays = new ArrayList<>();
+
+        // Add text fields
+        System.out.println("[DEBUG] Adding text fields to multipart data");
+        for (Map.Entry<String, String> entry : data.entrySet()) {
+            System.out.println("[DEBUG] Adding field: " + entry.getKey() + " = " + entry.getValue());
+            byteArrays.add(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
+            byteArrays.add(("Content-Disposition: form-data; name=\"" + entry.getKey() + "\"\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+            byteArrays.add((entry.getValue() + "\r\n").getBytes(StandardCharsets.UTF_8));
+        }
+
+        // Add file part
+        System.out.println("[DEBUG] Adding file part to multipart data: " + file.getFileName());
+        byteArrays.add(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
+        byteArrays.add(("Content-Disposition: form-data; name=\"file\"; filename=\"" + file.getFileName() + "\"\r\n").getBytes(StandardCharsets.UTF_8));
+        byteArrays.add(("Content-Type: text/plain\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        byteArrays.add(Files.readAllBytes(file));
+        byteArrays.add(("\r\n").getBytes(StandardCharsets.UTF_8));
+
+        // Add end boundary
+        System.out.println("[DEBUG] Adding end boundary");
+        byteArrays.add(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+
+        return HttpRequest.BodyPublishers.ofByteArrays(byteArrays);
     }
 
     public BorderPane getRoot() {

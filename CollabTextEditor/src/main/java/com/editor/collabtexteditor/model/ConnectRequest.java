@@ -1,16 +1,17 @@
 package com.editor.collabtexteditor.model;
 
+import lombok.Getter;
+import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+@Getter @Setter
 public class ConnectRequest {
     private String userId;
-    private String shareCode;
-
-    public ConnectRequest() {}
-    public ConnectRequest(String userId, String shareCode) {
-        this.userId = userId;
-        this.shareCode = shareCode;
+    private boolean isEditor;
+    public ConnectRequest() {
     }
-    public String getUserId() { return userId; }
-    public String getShareCode() { return shareCode; }
-    public void setUserId(String userId) { this.userId = userId; }
-    public void setShareCode(String shareCode) { this.shareCode = shareCode; }
+    public ConnectRequest(@JsonProperty("userId") String userId, @JsonProperty("isEditor") boolean isEditor) {
+        this.userId = userId;
+        this.isEditor = isEditor;
+    }
 }
