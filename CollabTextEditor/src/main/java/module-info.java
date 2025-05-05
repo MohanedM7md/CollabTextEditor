@@ -12,6 +12,7 @@ module com.editor.collabtexteditor {
     requires spring.messaging;
     requires spring.websocket;
     requires spring.core;
+    requires java.desktop;
 
     opens com.editor.collabtexteditor to javafx.fxml;
     exports com.editor.collabtexteditor;

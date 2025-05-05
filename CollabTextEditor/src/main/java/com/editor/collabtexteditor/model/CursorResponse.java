@@ -8,6 +8,12 @@ public class CursorResponse {
 
     public CursorResponse() {}
 
+    public CursorResponse(String userId, int position, String color) {
+        this.userId = userId;
+        this.position = position;
+        this.color = color;
+    }
+
     public String getUserId() {
         return userId;
     }

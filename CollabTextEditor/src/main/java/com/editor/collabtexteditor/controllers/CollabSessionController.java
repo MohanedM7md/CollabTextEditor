@@ -12,11 +12,20 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.stage.FileChooser;
+import lombok.Getter;
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +34,7 @@ import java.util.function.Consumer;
 import static com.editor.collabtexteditor.Configs.API_URL;
 
 public class CollabSessionController {
+    @Getter
     private final BorderPane root = new BorderPane();
     private final TextArea textArea = new TextArea();
     private final Label statusLabel = new Label("Status: Loading...");
@@ -35,6 +45,8 @@ public class CollabSessionController {
     private final Button undoBtn = new Button("Undo");
     private final Button redoBtn = new Button("Redo");
     private final Button shareBtn = new Button("Share");
+    private final Button importBtn = new Button("Import");
+    private final Button exportBtn = new Button("Export");
     private final Label docInfoLabel = new Label();
     private final ProgressIndicator loadingIndicator = new ProgressIndicator();
     private final ListView<String> activeUsersList = new ListView<>();
@@ -49,6 +61,7 @@ public class CollabSessionController {
     private final Map<String, String> cursorColors = new ConcurrentHashMap<>();
     private final Map<String, String> activeUsers = new ConcurrentHashMap<>();
     private boolean isApplyingRemoteUpdate = false;
+    private boolean isApplyingRemoteCursor = false;
 
     // For REST API calls
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -143,6 +156,9 @@ public class CollabSessionController {
         shareBtn.setStyle(buttonStyle.replace("#007BFF", "#28A745"));
         undoBtn.setStyle(buttonStyle);
         redoBtn.setStyle(buttonStyle);
+        importBtn.setStyle(buttonStyle.replace("#007BFF", "#17A2B8"));  // Blue-green
+        exportBtn.setStyle(buttonStyle.replace("#007BFF", "#FFC107")); // Amber
+
 
         // Loading indicator styling
         loadingIndicator.setStyle("-fx-progress-color: #007BFF;");
@@ -224,6 +240,8 @@ public class CollabSessionController {
                 shareBtn,
                 undoBtn,
                 redoBtn,
+                importBtn,
+                exportBtn,
                 separator,
                 metadataHeader,
                 docMetadataBox,
@@ -269,12 +287,13 @@ public class CollabSessionController {
             }
         });
 
-
         textArea.caretPositionProperty().addListener((obs, oldPos, newPos) -> {
-            if (stompClient == null || !textArea.isEditable()) return;
+            if (stompClient == null || !textArea.isEditable() || isApplyingRemoteCursor) return;
+
             CursorUpdateRequest req = new CursorUpdateRequest(userId, newPos.intValue(), getColorForUser(userId));
             sendMessage("/app/document/" + docId + "/cursor", req);
         });
+
 
         undoBtn.setOnAction(e -> {
             if (stompClient == null) return;
@@ -285,6 +304,41 @@ public class CollabSessionController {
             if (stompClient == null) return;
             sendMessage("/app/document/" + docId + "/redo", new RedoRequest(userId));
         });
+        importBtn.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Import Text File");
+            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
+            File selectedFile = fileChooser.showOpenDialog(root.getScene().getWindow());
+
+            if (selectedFile != null) {
+                importDocument(selectedFile);
+            }
+        });
+
+
+        exportBtn.setOnAction(e -> {
+            FileChooser fileChooser = new FileChooser();
+            fileChooser.setTitle("Export Document");
+            fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text Files", "*.txt"));
+            fileChooser.setInitialFileName("document_" + docId + ".txt");
+
+            File file = fileChooser.showSaveDialog(root.getScene().getWindow());
+
+            if (file != null) {
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+                    writer.write(textArea.getText());  // Get text directly from TextArea
+                    statusLabel.setText("Export successful.");
+                    statusLabel.setStyle("-fx-text-fill: green;");
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                    statusLabel.setText("Export failed.");
+                    statusLabel.setStyle("-fx-text-fill: red;");
+                }
+            }
+        });
+
+
+
 
         // Add hover effects for buttons
         setupButtonHoverEffect(shareBtn, "#28A745", "#218838");
@@ -304,6 +358,46 @@ public class CollabSessionController {
             button.setStyle(style);
         });
     }
+    private void importDocument(File file) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(API_URL + "documents/" + docId + "/import?userId=" + userId))
+                    .timeout(Duration.ofSeconds(15))
+                    .header("Content-Type", "multipart/form-data; boundary=---011000010111000001101001")
+                    .POST(ofFileMultipart(file))
+                    .build();
+
+            httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenAccept(response -> {
+                        if (response.statusCode() == 200) {
+                            Platform.runLater(() -> {
+                                statusLabel.setText("Import successful.");
+                                statusLabel.setStyle("-fx-text-fill: green;");
+                            });
+                        } else {
+                            Platform.runLater(() -> {
+                                statusLabel.setText("Import failed: " + response.body());
+                                statusLabel.setStyle("-fx-text-fill: red;");
+                            });
+                        }
+                    });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    private static HttpRequest.BodyPublisher ofFileMultipart(File file) throws IOException {
+        String boundary = "---011000010111000001101001";
+        var byteArrays = new ArrayList<byte[]>();
+
+        byteArrays.add(("--" + boundary + "\r\n").getBytes());
+        byteArrays.add(("Content-Disposition: form-data; name=\"file\"; filename=\"" + file.getName() + "\"\r\n").getBytes());
+        byteArrays.add(("Content-Type: text/plain\r\n\r\n").getBytes());
+        byteArrays.add(Files.readAllBytes(file.toPath()));
+        byteArrays.add(("\r\n--" + boundary + "--\r\n").getBytes());
+
+        return HttpRequest.BodyPublishers.ofByteArrays(byteArrays);
+    }
+
 
     private void loadDocument() {
         System.out.println("[DEBUG] loadDocument() called");
@@ -405,7 +499,7 @@ public class CollabSessionController {
                 // Update UI with document info
                 docInfoLabel.setText(documentTitle);
 
-                VBox docMetadataBox = (VBox) rightBar.getChildren().get(6);
+                VBox docMetadataBox = (VBox) rightBar.getChildren().get(8);
                 ((Label) docMetadataBox.getChildren().get(0)).setText(documentTitle);
                 ((Label) docMetadataBox.getChildren().get(1)).setText("Creator: " + documentCreator);
                 ((Label) docMetadataBox.getChildren().get(2)).setText("Modified: " + lastModified);
@@ -735,16 +829,20 @@ public class CollabSessionController {
                 (int)(color.getBlue() * 255));
     }
 
-    public BorderPane getRoot() {
-        return root;
-    }
-
     public boolean isApplyingRemoteUpdate() {
         return isApplyingRemoteUpdate;
     }
 
     public void setApplyingRemoteUpdate(boolean applyingRemoteUpdate) {
         isApplyingRemoteUpdate = applyingRemoteUpdate;
+    }
+
+    public boolean isApplyingRemoteCursor() {
+        return isApplyingRemoteCursor;
+    }
+
+    public void setApplyingRemoteCursor(boolean applyingRemoteCursor) {
+        isApplyingRemoteCursor = applyingRemoteCursor;
     }
 
 

@@ -61,7 +61,7 @@ public class DocumentController {
             Document document = documentService.findById(id)
                     .orElseThrow(() -> new RuntimeException("Document not found"));
 
-            File tempFile = new File("crdt_single_thread_test.txt");
+            File tempFile = File.createTempFile("upload_", ".txt");
             file.transferTo(tempFile);
 
             document.importFromTextFile(tempFile, userId);

@@ -77,5 +77,7 @@ public class CollaborationController {
     @MessageMapping("/document/connect")
     public void handleConnect(@Payload ConnectRequest request) {
         System.out.println("Connect request: user=" + request.getUserId() + ", shareCode=" + request.getShareCode());
+        messagingTemplate.convertAndSend("/topic/document/" + request.getShareCode() + "/user-joined",
+                new ConnectRequest());
     }
 }

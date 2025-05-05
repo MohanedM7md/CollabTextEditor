@@ -13,6 +13,7 @@ import org.springframework.web.socket.sockjs.client.SockJsClient;
 import org.springframework.web.socket.sockjs.client.Transport;
 import org.springframework.web.socket.sockjs.client.WebSocketTransport;
 
+import java.awt.*;
 import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.List;
@@ -28,6 +29,7 @@ public class CollaborationStompClient {
     private final Runnable connectionClosedHandler;
     private final String docId;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final TextArea textArea=new TextArea();
 
 
     public CollaborationStompClient(String serverUrl,
@@ -123,11 +125,47 @@ public class CollaborationStompClient {
         @Override
         public void handleFrame(StompHeaders headers, Object payload) {
             try {
-                String json = objectMapper.writeValueAsString(payload);
+                CursorResponse response = (CursorResponse) payload;
+                CursorResponse safeResponse = makePositionSafe(response);
+
+                String json = objectMapper.writeValueAsString(safeResponse);
                 messageHandler.accept(json);
+
             } catch (JsonProcessingException e) {
+                System.err.println("JSON processing error in cursor update:");
+                e.printStackTrace();
+            } catch (Exception e) {
+                System.err.println("Unexpected error handling cursor update:");
                 e.printStackTrace();
             }
+        }
+
+        private CursorResponse makePositionSafe(CursorResponse response) {
+            String currentText = textArea.getText();
+            int textLength = currentText.length();
+            int position = response.getPosition();
+
+            // Adjust position if out of bounds
+            if (position < 0) {
+                position = 0;
+            } else if (position > textLength) {
+                position = textLength;
+            }
+
+            // Ensure position isn't in the middle of a line break
+            if (position > 0 && position < textLength) {
+                char prevChar = currentText.charAt(position - 1);
+                char nextChar = currentText.charAt(position);
+                if (prevChar == '\r' && nextChar == '\n') {
+                    position--; // Move to start of line break
+                }
+            }
+
+            // Return new response with safe position
+            return new CursorResponse(
+                    response.getUserId(),response.getPosition(),
+                    response.getColor()
+            );
         }
     }
 
