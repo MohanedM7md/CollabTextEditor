@@ -21,8 +21,9 @@ import java.awt.*;
 import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 public class CollaborationStompClient {
@@ -33,11 +34,7 @@ public class CollaborationStompClient {
     private final String docId;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TextArea textArea=new TextArea();
-    private static final int MAX_RETRIES = 3;
-    private static final long RECONNECT_DELAY_MS = 5000;
-    private volatile boolean manuallyDisconnected = false;
-    private final AtomicInteger connectionAttempts = new AtomicInteger(0);
-    private ScheduledExecutorService reconnectExecutor;
+
 
     public CollaborationStompClient(String serverUrl,
                                     String docId,
@@ -50,31 +47,17 @@ public class CollaborationStompClient {
     }
 
     public void connect() throws ExecutionException, InterruptedException, TimeoutException {
-        manuallyDisconnected = false;
-        connectionAttempts.set(0);
-
-        if (reconnectExecutor == null) {
-            reconnectExecutor = Executors.newSingleThreadScheduledExecutor();
-        }
-
-        internalConnect();
-    }
-
-    private void internalConnect() throws ExecutionException, InterruptedException, TimeoutException {
         WebSocketClient webSocketClient = new StandardWebSocketClient();
         List<Transport> transports = Collections.singletonList(new WebSocketTransport(webSocketClient));
         SockJsClient sockJsClient = new SockJsClient(transports);
 
         WebSocketStompClient stompClient = new WebSocketStompClient(sockJsClient);
-        MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter();
-        converter.setObjectMapper(objectMapper);
-        stompClient.setMessageConverter(converter);
+        stompClient.setMessageConverter(new MappingJackson2MessageConverter());
 
         this.stompSession = stompClient.connect(serverUrl, new StompSessionHandler() {
             @Override
             public void afterConnected(StompSession session, StompHeaders connectedHeaders) {
                 System.out.println("[WebSocket] Connected to server");
-                connectionAttempts.set(0); // Reset on successful connection
 
                 // Subscribe to real-time updates
                 session.subscribe("/topic/document/" + docId + "/state", new DocumentUpdateHandler());
@@ -87,29 +70,12 @@ public class CollaborationStompClient {
             public void handleException(StompSession session, StompCommand command,
                                         StompHeaders headers, byte[] payload, Throwable exception) {
                 System.err.println("STOMP exception: " + exception.getMessage());
-                handleConnectionFailure();
             }
 
             @Override
             public void handleTransportError(StompSession session, Throwable exception) {
                 System.err.println("[WebSocket] Transport error: " + exception.getMessage());
-                handleConnectionFailure();
-            }
-
-            private void handleConnectionFailure() {
-                if (!manuallyDisconnected && connectionAttempts.incrementAndGet() <= MAX_RETRIES) {
-                    System.out.println("Attempting to reconnect (" + connectionAttempts.get() + "/" + MAX_RETRIES + ")...");
-                    reconnectExecutor.schedule(() -> {
-                        try {
-                            internalConnect();
-                        } catch (Exception e) {
-                            System.err.println("Reconnect attempt failed: " + e.getMessage());
-                            handleConnectionFailure();
-                        }
-                    }, RECONNECT_DELAY_MS, TimeUnit.MILLISECONDS);
-                } else {
-                    connectionClosedHandler.run();
-                }
+                connectionClosedHandler.run(); // Optionally reconnect or notify user
             }
 
             @Override
@@ -134,33 +100,12 @@ public class CollaborationStompClient {
     }
 
     public void safeDisconnect(String destination, Object disconnectPayload) {
-        manuallyDisconnected = true;
-
         if (stompSession != null && stompSession.isConnected()) {
-            try {
-                // Send disconnect message with timeout
-                CompletableFuture<Void> sendFuture = CompletableFuture.runAsync(() -> {
-                    stompSession.send(destination, disconnectPayload);
-                });
 
-                // Wait for message to be sent (with timeout) before disconnecting
-                sendFuture.get(2, TimeUnit.SECONDS);
-            } catch (Exception e) {
-                System.err.println("Error sending disconnect message: " + e.getMessage());
-            } finally {
-                try {
-                    stompSession.disconnect();
-                } catch (Exception e) {
-                    System.err.println("Error during disconnect: " + e.getMessage());
-                }
-            }
+            stompSession.send(destination, disconnectPayload);
+
         } else if (stompSession != null) {
             stompSession.disconnect();
-        }
-
-        if (reconnectExecutor != null) {
-            reconnectExecutor.shutdown();
-            reconnectExecutor = null;
         }
     }
 
@@ -270,33 +215,5 @@ public class CollaborationStompClient {
 
     public boolean isConnected() {
         return stompSession != null && stompSession.isConnected();
-    }
-
-    public boolean isConnecting() {
-        return connectionAttempts.get() > 0 && !isConnected();
-    }
-
-    public int getConnectionAttempts() {
-        return connectionAttempts.get();
-    }
-
-
-    public void startHeartbeat(long intervalMs) {
-        if (stompSession == null || !stompSession.isConnected()) {
-            throw new IllegalStateException("Not connected");
-        }
-
-        ScheduledExecutorService heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
-        heartbeatExecutor.scheduleAtFixedRate(() -> {
-            if (stompSession.isConnected()) {
-                try {
-                    stompSession.send("/app/heartbeat", "ping");
-                } catch (Exception e) {
-                    System.err.println("Heartbeat failed: " + e.getMessage());
-                }
-            } else {
-                heartbeatExecutor.shutdown();
-            }
-        }, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
     }
 }
