@@ -10,7 +10,7 @@ public class CollaborationService {
 
     private final DocumentService documentService;
 
-    public CollaborationService(DocumentService documentService, SessionRegistry sessionRegistry) {
+    public CollaborationService(DocumentService documentService) {
         this.documentService = documentService;
     }
 

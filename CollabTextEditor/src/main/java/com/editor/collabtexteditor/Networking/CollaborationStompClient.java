@@ -209,10 +209,6 @@ public class CollaborationStompClient {
             }
         }
     }
-
-
-
-
     public boolean isConnected() {
         return stompSession != null && stompSession.isConnected();
     }

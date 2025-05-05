@@ -92,25 +92,4 @@ public class DocumentController {
     }
 
 
-    @GetMapping("/{id}/export")
-    public ResponseEntity<InputStreamResource> exportText(@PathVariable String id) {
-        try {
-            Document document = documentService.findById(id)
-                    .orElseThrow(() -> new RuntimeException("Document not found"));
-
-            File tempFile = new File("crdt99.txt");
-            document.exportToTextFile(tempFile);
-
-            InputStreamResource resource = new InputStreamResource(new FileInputStream(tempFile));
-
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + id + ".txt")
-                    .contentType(MediaType.TEXT_PLAIN)
-                    .contentLength(tempFile.length())
-                    .body(resource);
-        } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
-
 }

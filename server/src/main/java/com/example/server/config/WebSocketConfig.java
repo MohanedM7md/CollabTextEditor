@@ -10,19 +10,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        System.out.println("[WebSocketConfig] Registering STOMP endpoint at /ws");
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*").withSockJS();
-        System.out.println("[WebSocketConfig] STOMP endpoint registered with CORS: *");
     }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        System.out.println("[WebSocketConfig] Configuring message broker");
-        System.out.println("[WebSocketConfig] Enabling simple broker at /topic");
         config.enableSimpleBroker("/topic"); // for broadcasting
-        System.out.println("[WebSocketConfig] Setting application destination prefix to /app");
         config.setApplicationDestinationPrefixes("/app"); // for client-to-server messages
-        System.out.println("[WebSocketConfig] Message broker configuration complete");
     }
 }
