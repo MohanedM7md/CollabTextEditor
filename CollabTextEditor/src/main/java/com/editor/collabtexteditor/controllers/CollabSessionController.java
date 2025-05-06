@@ -349,7 +349,7 @@ public class CollabSessionController {
         System.out.println("Not Null");
         shareBtn.setOnAction(e -> showShareDialog());
 
-        textArea.textProperty().addListener((obs, oldText, newText) -> {
+        textArea.textProperty().addListener((_, oldText, newText) -> {
             if (stompClient == null || !textArea.isEditable() || isApplyingRemoteUpdate) return;
 
             int changePos = findChangePosition(oldText, newText);
@@ -357,18 +357,19 @@ public class CollabSessionController {
                 int delta = newText.length() - oldText.length();
 
                 if (delta > 0) {
-                    // PASTE or multi-character insert
                     String inserted = newText.substring(changePos, changePos + delta);
-                    System.out.println("PASTE detected: " + inserted);
-                    for (int i = 0; i < inserted.length(); i++) {
-                        char c = inserted.charAt(i);
-                        InsertRequest req = new InsertRequest(userId, c, changePos + i);
+                    if (delta == 1) {
+                        // Single character insert
+                        InsertRequest req = new InsertRequest(userId, inserted.charAt(0), changePos);
                         sendMessage("/app/document/" + docId + "/insert", req);
+                    } else {
+                        // Bulk insert
+                        BulkInsertRequest bulkReq = new BulkInsertRequest(userId, inserted, changePos);
+                        sendMessage("/app/document/" + docId + "/insert/bulk", bulkReq);
                     }
                 } else if (delta < 0) {
-                    // Multi-character delete
+                    // Deletion handling remains the same
                     int deleteCount = -delta;
-                    System.out.println("MULTI DELETE detected");
                     for (int i = 0; i < deleteCount; i++) {
                         DeleteRequest req = new DeleteRequest(userId, changePos);
                         sendMessage("/app/document/" + docId + "/delete", req);
@@ -438,18 +439,6 @@ public class CollabSessionController {
         });
     }
 
-    private static HttpRequest.BodyPublisher ofFileMultipart(File file) throws IOException {
-        String boundary = "---011000010111000001101001";
-        var byteArrays = new ArrayList<byte[]>();
-
-        byteArrays.add(("--" + boundary + "\r\n").getBytes());
-        byteArrays.add(("Content-Disposition: form-data; name=\"file\"; filename=\"" + file.getName() + "\"\r\n").getBytes());
-        byteArrays.add(("Content-Type: text/plain\r\n\r\n").getBytes());
-        byteArrays.add(Files.readAllBytes(file.toPath()));
-        byteArrays.add(("\r\n--" + boundary + "--\r\n").getBytes());
-
-        return HttpRequest.BodyPublishers.ofByteArrays(byteArrays);
-    }
 
 
     private void loadDocument() {

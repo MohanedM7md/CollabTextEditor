@@ -38,7 +38,19 @@ public class CollaborationController {
         System.out.println("Response text length: " + response.getText().length());
         messagingTemplate.convertAndSend("/topic/document/" + docId + "/state", response);
     }
-
+    @MessageMapping("/document/{docId}/insert/bulk")
+    public void handleBulkInsert(@DestinationVariable String docId,
+                                 @Payload BulkInsertRequest request) {
+        System.out.println("\n=== INSERT Bulk REQUEST ===");
+        System.out.println("Document ID: " + docId);
+        System.out.println("User ID: " + request.getUserId());
+        System.out.println("Character: '" + request.getText()+ "'");
+        System.out.println("Position: " + request.getPosition());
+        DocumentStateResponse response = collaborationService.handleInsertBulk(docId, request);
+        System.out.println("Sending response to /topic/document/" + docId + "/state");
+        System.out.println("Response text length: " + response.getText().length());
+        messagingTemplate.convertAndSend("/topic/document/" + docId + "/state", response);
+    }
     @MessageMapping("/document/{docId}/delete")
     public void handleDelete(@DestinationVariable String docId,
                              @Payload DeleteRequest request) {

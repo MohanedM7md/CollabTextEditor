@@ -22,6 +22,18 @@ public class CollaborationService {
         }).orElseThrow(() -> new RuntimeException("Document not found"));
     }
 
+    public DocumentStateResponse handleInsertBulk(String docId, BulkInsertRequest request) {
+        return documentService.findById(docId).map(document -> {
+            CRDTDocument crdt = document.getCrdtDocument();
+                crdt.setHistoryEnabled(false);
+                for (int i = 0; i < request.getText().length(); i++) {
+                    char c = request.getText().charAt(i);
+                    crdt.insertBulk(c, i, request.getUserId());
+                }
+            return crdt.getCurrentState("INSERT-BULK", request.getUserId());
+        }).orElseThrow(() -> new RuntimeException("Document not found"));
+    }
+
     public DocumentStateResponse handleDelete(String docId, DeleteRequest request) {
         return documentService.findById(docId).map(document -> {
             CRDTDocument crdt = document.getCrdtDocument();

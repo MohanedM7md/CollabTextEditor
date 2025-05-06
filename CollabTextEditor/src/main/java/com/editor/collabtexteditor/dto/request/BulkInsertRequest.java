@@ -1,21 +1,18 @@
 package com.editor.collabtexteditor.dto.request;
-
 import lombok.Getter;
 import lombok.Setter;
 
 @Setter
 @Getter
-public class InsertRequest {
-    // Getters/Setters
+public class BulkInsertRequest {
     private String userId;
-    private char value;
+    private String text;
     private int position;
 
-    public InsertRequest() {}
-    public InsertRequest(String userId, char value, int position) {
+    BulkInsertRequest(){}
+    public BulkInsertRequest(String userId, String text, int position) {
         this.userId = userId;
-        this.value = value;
+        this.text = text;
         this.position = position;
     }
-
 }
