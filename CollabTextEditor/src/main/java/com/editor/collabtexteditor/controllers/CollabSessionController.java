@@ -364,6 +364,7 @@ public class CollabSessionController {
                         sendMessage("/app/document/" + docId + "/insert", req);
                     } else {
                         // Bulk insert
+                        System.out.println("Inserted " + inserted);
                         BulkInsertRequest bulkReq = new BulkInsertRequest(userId, inserted, changePos);
                         sendMessage("/app/document/" + docId + "/insert/bulk", bulkReq);
                     }

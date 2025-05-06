@@ -36,7 +36,6 @@ public class CRDTDocument {
             throw new IllegalStateException("User doesn't have edit permissions");
         }
 
-        // Convert client position to CRDT position
         int crdtPosition = clientToCrdtPosition(clientPosition);
 
         if (crdtPosition < 0 || crdtPosition > items.size()) {

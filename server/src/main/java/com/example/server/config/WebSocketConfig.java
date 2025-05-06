@@ -19,4 +19,12 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         config.enableSimpleBroker("/topic"); // for broadcasting
         config.setApplicationDestinationPrefixes("/app"); // for client-to-server messages
     }
+    @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration
+                .setMessageSizeLimit(1024 * 1024)        // 1 MB message size
+                .setSendBufferSizeLimit(1024 * 1024)     // 1 MB buffer
+                .setSendTimeLimit(20000);                // 20 seconds send time
+    }
+
 }
