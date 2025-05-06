@@ -61,6 +61,8 @@ public class CRDTDocument {
         if (!item.isDeleted()) {
             applyOperation(new DeleteOperation(item, userId));
         }
+        int deletedCharGlobalPos = clientPosition;
+        updateCommentsOnDelete(deletedCharGlobalPos);
     }
 
     public synchronized void addHighlight(int startPos, int endPos, String color, String userId) throws IllegalStateException {
@@ -341,6 +343,25 @@ public class CRDTDocument {
     }
     public void applyRemoveComment(CommentPosition comment) {
         comments.remove(comment.getId());
+    }
+
+    private void updateCommentsOnDelete(int deletedPos) {
+        List<String> toRemove = new ArrayList<>();
+
+        for (Map.Entry<String, CommentPosition> entry : comments.entrySet()) {
+            CommentPosition comment = entry.getValue();
+            int start = comment.getStartPos();
+            int end = comment.getEndPos();
+
+            // Check if the deleted character is within the comment range
+            if (deletedPos >= start && deletedPos < end) {
+                toRemove.add(comment.getId());
+            }
+        }
+
+        for (String commentId : toRemove) {
+            removeComment(commentId, "system");  // Use "system" or actual userId if you prefer
+        }
     }
 
 

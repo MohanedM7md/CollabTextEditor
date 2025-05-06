@@ -10,7 +10,7 @@ public class AddCommentRequest {
     private int    startPos;
 
     private int    endPos;          // exclusive
-    private String color;           // e.g. "#ffcc00"
+    private String color;
     private String text;
 
     public AddCommentRequest() {}   // ← Jackson / Gson need no-arg ctor
@@ -24,6 +24,4 @@ public class AddCommentRequest {
         this.color    = color;
         this.text     = text;
     }
-
-    /* getters + setters (or Lombok @Getter @Setter) */
 }
