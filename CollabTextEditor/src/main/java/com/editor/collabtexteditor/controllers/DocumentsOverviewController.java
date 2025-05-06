@@ -22,10 +22,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-import static com.editor.collabtexteditor.Configs.API_URL;
+import static com.editor.collabtexteditor.Configs.*;
 public class DocumentsOverviewController {
     private final BorderPane root = new BorderPane();
-    private final String generatedUserId = UUID.randomUUID().toString().substring(0, 3);
     private final Button importBtn = new Button("Import");
 
     private static final String BOUNDARY = UUID.randomUUID().toString();
