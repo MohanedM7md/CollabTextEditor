@@ -350,23 +350,33 @@ public class CollabSessionController {
         shareBtn.setOnAction(e -> showShareDialog());
 
         textArea.textProperty().addListener((obs, oldText, newText) -> {
-            if (stompClient == null || !textArea.isEditable() || isApplyingRemoteUpdate) return;  // Skip if flag is true
+            if (stompClient == null || !textArea.isEditable() || isApplyingRemoteUpdate) return;
 
             int changePos = findChangePosition(oldText, newText);
             if (changePos >= 0) {
-                if (newText.length() > oldText.length()) {
-                    char c = newText.charAt(changePos);
-                    System.out.println(c);
-                    System.out.println("is inserted");
-                    InsertRequest req = new InsertRequest(userId, c, changePos);
-                    sendMessage("/app/document/" + docId + "/insert", req);
-                } else if (oldText.length() > newText.length()) {
-                    DeleteRequest req = new DeleteRequest(userId, changePos);
-                    System.out.println("is deleted");
-                    sendMessage("/app/document/" + docId + "/delete", req);
+                int delta = newText.length() - oldText.length();
+
+                if (delta > 0) {
+                    // PASTE or multi-character insert
+                    String inserted = newText.substring(changePos, changePos + delta);
+                    System.out.println("PASTE detected: " + inserted);
+                    for (int i = 0; i < inserted.length(); i++) {
+                        char c = inserted.charAt(i);
+                        InsertRequest req = new InsertRequest(userId, c, changePos + i);
+                        sendMessage("/app/document/" + docId + "/insert", req);
+                    }
+                } else if (delta < 0) {
+                    // Multi-character delete
+                    int deleteCount = -delta;
+                    System.out.println("MULTI DELETE detected");
+                    for (int i = 0; i < deleteCount; i++) {
+                        DeleteRequest req = new DeleteRequest(userId, changePos);
+                        sendMessage("/app/document/" + docId + "/delete", req);
+                    }
                 }
             }
         });
+
 
         textArea.caretPositionProperty().addListener((obs, oldPos, newPos) -> {
             if (stompClient == null || !textArea.isEditable() || isApplyingRemoteCursor) return;
