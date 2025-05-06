@@ -88,5 +88,18 @@ public class CollaborationService {
         });
     }
 
-
+    public DocumentStateResponse handleAddComment(String docId,
+                                                  AddCommentRequest req) {
+        return documentService.findById(docId)
+                .map(doc -> {
+                    CRDTDocument crdt = doc.getCrdtDocument();
+                    crdt.addComment(req.getStartPos(),
+                            req.getEndPos(),
+                            req.getColor(),
+                            req.getUserId(),
+                            req.getText());
+                    return crdt.getCurrentState("ADDCOMMENT", req.getUserId());
+                })
+                .orElseThrow(() -> new RuntimeException("Document not found"));
+    }
 }

@@ -1,11 +1,14 @@
-package com.editor.collabtexteditor.model;
+package com.editor.collabtexteditor.dto.response;
 
+import com.editor.collabtexteditor.model.CommentPosition;
+import com.editor.collabtexteditor.model.CursorPosition;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Getter;
 
 import java.util.List;
-import java.util.Map;
 
+@Getter
 public class DocumentResponse {
     private String id;
     private String title;
@@ -40,33 +43,24 @@ public class DocumentResponse {
     }
     // Getters and setters
 
-    public String getId() { return id; }
-    public String getTitle() { return title; }
-    public String getOwnerId() { return ownerId; }
-    public String getCreatedAt() { return createdAt; }
-    public String getUpdatedAt() { return updatedAt; }
-    public String getEditorCode() { return editorCode; }
-    public String getViewerCode() { return viewerCode; }
-    public String getStatus() { return status; }
-    public CrdtDocument getCrdtDocument() { return crdtDocument; }
-
+    @Getter
     public static class CrdtDocument {
         private String activeUsers;
         private String text;
         private List<CursorPosition> allCursors;
+        private List<CommentPosition> allComments;
 
         public CrdtDocument(
-               String activeUsers,
-               String text,
-               List<CursorPosition> allCursors) {
+                String activeUsers,
+                String text,
+                List<CursorPosition> allCursors,
+                List<CommentPosition> allComments) {
             this.activeUsers = activeUsers;
             this.text = text;
             this.allCursors = allCursors;
+            this.allComments = allComments;
         }
 
 
-        public String getActiveUsers() { return activeUsers; }
-        public String getText() { return text; }
-        public List<CursorPosition>getAllCursors() { return allCursors; }
     }
 }

@@ -20,8 +20,8 @@ public class Document {
     private LocalDateTime updatedAt;
     private String editorCode;
     private String viewerCode;
-    private CRDTDocument crdtDocument;
     private DocumentStatus status = DocumentStatus.ACTIVE;
+    private CRDTDocument crdtDocument;
 
     public Document() {
         this.id = UUID.randomUUID().toString();

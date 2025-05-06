@@ -1,4 +1,4 @@
-package com.editor.collabtexteditor.model;
+package com.editor.collabtexteditor.dto.request;
 
 public class InsertRequest {
     private String userId;

@@ -18,4 +18,6 @@ module com.editor.collabtexteditor {
     exports com.editor.collabtexteditor;
     exports com.editor.collabtexteditor.controllers;
     opens com.editor.collabtexteditor.controllers to javafx.fxml;
+    exports com.editor.collabtexteditor.dto.request;
+    exports com.editor.collabtexteditor.dto.response;
 }

@@ -66,6 +66,13 @@ public class CollaborationController {
 
     }
 
+    @MessageMapping("/document/{docId}/comment/add")
+    public void addComment(@DestinationVariable String docId,
+                           @Payload AddCommentRequest  request) {
+        DocumentStateResponse response =  collaborationService.handleAddComment(docId, request);
+        messagingTemplate.convertAndSend("/topic/document/" + docId + "/state", response);
+    }
+
     @MessageMapping("/document/{docId}/redo")
     public void handleRedo(@DestinationVariable String docId,
                            @Payload RedoRequest request) {

@@ -1,8 +1,8 @@
 package com.editor.collabtexteditor.Networking;
 
-import com.editor.collabtexteditor.model.ConnectRequest;
-import com.editor.collabtexteditor.model.CursorResponse;
-import com.editor.collabtexteditor.model.DocumentStateResponse;
+import com.editor.collabtexteditor.dto.request.ConnectRequest;
+import com.editor.collabtexteditor.dto.response.CursorResponse;
+import com.editor.collabtexteditor.dto.response.DocumentStateResponse;
 import com.editor.collabtexteditor.model.UserConnWectionEvent;
 
 import com.fasterxml.jackson.core.JsonProcessingException;

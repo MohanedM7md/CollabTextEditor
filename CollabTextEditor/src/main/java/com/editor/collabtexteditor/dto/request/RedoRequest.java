@@ -1,4 +1,4 @@
-package com.editor.collabtexteditor.model;
+package com.editor.collabtexteditor.dto.request;
 
 public class RedoRequest {
     private String userId;

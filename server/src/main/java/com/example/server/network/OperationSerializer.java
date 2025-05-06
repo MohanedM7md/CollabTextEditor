@@ -22,9 +22,9 @@ public class OperationSerializer {
         objectMapper.registerSubtypes(
                 new NamedType(com.example.server.CRDT.operations.InsertOperation.class, "INSERT"),
                 new NamedType(com.example.server.CRDT.operations.DeleteOperation.class, "DELETE"),
-                new NamedType(com.example.server.CRDT.operations.CommentOperation.class, "COMMENT"),
+                new NamedType(com.example.server.CRDT.operations.AddCommentOperation.class, "ADDCOMMENT"),
+                new NamedType(com.example.server.CRDT.operations.RemoveCommentOperation.class, "REMOVECOMMENT"),
                 new NamedType(com.example.server.CRDT.operations.HighlightOperation.class, "HIGHLIGHT")
-        // Add other operation types as needed
         );
     }
 

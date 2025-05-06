@@ -1,19 +1,24 @@
 package com.editor.collabtexteditor.controllers;
 
 import com.editor.collabtexteditor.Networking.CollaborationStompClient;
+import com.editor.collabtexteditor.dto.request.*;
+import com.editor.collabtexteditor.dto.response.*;
 import com.editor.collabtexteditor.model.*;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
@@ -48,7 +53,7 @@ public class CollabSessionController {
     private final Button undoBtn = new Button("Undo");
     private final Button redoBtn = new Button("Redo");
     private final Button shareBtn = new Button("Share");
-
+    private final Button commentBtn = new Button("💬 Comment");
     private final Button exportBtn = new Button("Export");
     private final Label docInfoLabel = new Label();
     private final ProgressIndicator loadingIndicator = new ProgressIndicator();
@@ -67,7 +72,10 @@ public class CollabSessionController {
     private boolean isApplyingRemoteCursor = false;
     private final Pane overlayPane = new Pane();
     private final Map<String, Rectangle> cursorIndicators = new ConcurrentHashMap<>();
-    // For REST API calls
+    private Label docTitleLabel;
+    private Label docCreatorLabel;
+    private Label docModifiedLabel;
+
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -78,6 +86,11 @@ public class CollabSessionController {
     private String lastModified = "";
     private String viewerCode = "";
     private String editorCode = "";
+    /* ========= comments ========= */
+    private final Map<String, CommentPosition> comments = new ConcurrentHashMap<>();
+
+    /* UI containers */
+    private final VBox commentsBox = new VBox(6);       // right bar list
     private Consumer<String> messageHandler;
     Rectangle test = new Rectangle(2, 18, Color.RED);
 
@@ -180,98 +193,150 @@ public class CollabSessionController {
     }
 
     private void initializeUI() {
-        // Session Info Bar
-        HBox.setHgrow(docInfoLabel, Priority.ALWAYS);
-        docInfoLabel.setText("Document: " + docId);
 
-        // Add loading indicator to status bar
-        HBox statusBox = new HBox(10, loadingIndicator, statusLabel);
-        statusBox.setAlignment(Pos.CENTER_RIGHT);
-
-        sessionBar.getChildren().addAll(backBtn, docInfoLabel, statusBox);
-        sessionBar.setAlignment(Pos.CENTER_LEFT);
-
-        // Text Area
-        textArea.setWrapText(true);
-        textArea.setEditable(false); // Initially disabled until document loads
-        textArea.setPrefHeight(500);
-
-        // Add line numbers (simplified version)
-        ScrollPane scrollPane = new ScrollPane(textArea);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setFitToHeight(true);
-
-        // Right Toolbar
-        Label toolsHeader = new Label("DOCUMENT TOOLS");
-        toolsHeader.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #6C757D;");
-
-        // Enhance buttons with icons (text representation)
+        /* ---------- SESSION BAR (top) -------------------------------- */
         shareBtn.setText("📤 Share");
         undoBtn.setText("↩ Undo");
         redoBtn.setText("↪ Redo");
+        HBox.setHgrow(docInfoLabel, Priority.ALWAYS);
+        docInfoLabel.setText("Document: " + docId);
+        HBox statusBox = new HBox(10, loadingIndicator, statusLabel);
+        statusBox.setAlignment(Pos.CENTER_RIGHT);
 
-        Separator separator = new Separator();
-        separator.setPadding(new Insets(10, 0, 10, 0));
+        sessionBar.getChildren().addAll(backBtn, docInfoLabel, shareBtn,
+                undoBtn,
+                redoBtn,exportBtn, statusBox);
+        sessionBar.setAlignment(Pos.CENTER_LEFT);
 
-        // Document info section
-        VBox docMetadataBox = new VBox(5);
-        docMetadataBox.setStyle(
-                "-fx-background-color: white;" +
-                        "-fx-padding: 10px;" +
-                        "-fx-border-color: #DEE2E6;" +
-                        "-fx-border-radius: 5px;"
-        );
+        /* ---------- TEXT AREA (center) -------------------------------- */
+        textArea.setWrapText(true);
+        textArea.setEditable(false);
+        textArea.setPrefHeight(500);
+        ScrollPane scroll = new ScrollPane(textArea);
+        scroll.setFitToWidth(true);
+        scroll.setFitToHeight(true);
 
-        Label metadataHeader = new Label("DOCUMENT INFO");
-        metadataHeader.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #6C757D;");
-
-        Label titleLabel = new Label("Loading...");
-        titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
-
-        Label creatorLabel = new Label("Creator: Loading...");
-        Label modifiedLabel = new Label("Last modified: Loading...");
-
-        docMetadataBox.getChildren().addAll(titleLabel, creatorLabel, modifiedLabel);
-
-        // Active users section
-        Label usersHeader = new Label("ACTIVE USERS");
-        usersHeader.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #6C757D;");
-
-        // Main Layout
-        VBox centerBox = new VBox(10, scrollPane, statusLabel);
+        VBox centerBox = new VBox(10, scroll, statusLabel);
         centerBox.setPadding(new Insets(15));
+
+        /* ---------- RIGHT SIDEBAR ------------------------------------ */
+        rightBar.setPrefWidth(220);
+
+        /* 1) TOOLS ----------------------------------------------------- */
+        Label toolsHeader = header("DOCUMENT TOOLS");
+
+
 
         rightBar.getChildren().addAll(
                 toolsHeader,
-                shareBtn,
-                undoBtn,
-                redoBtn,
-
-                exportBtn,
-                separator,
-                metadataHeader,
-                docMetadataBox,
-                new Separator(),
-                usersHeader,
-                activeUsersBox
+                commentBtn,          // ← NEW
+                new Separator()
         );
-        rightBar.setPrefWidth(220);
 
+        /* 2) DOCUMENT INFO -------------------------------------------- */
+        Label infoHeader = header("DOCUMENT INFO");
+
+        docTitleLabel    = new Label("Loading…"); docTitleLabel.setStyle("-fx-font-weight:bold;");
+        docCreatorLabel  = new Label("Creator: Loading…");
+        docModifiedLabel = new Label("Last modified: Loading…");
+
+        VBox docBox = boxed(docTitleLabel, docCreatorLabel, docModifiedLabel);
+
+        rightBar.getChildren().addAll(
+                infoHeader,
+                docBox,
+                new Separator()
+        );
+
+        /* 3) ACTIVE USERS --------------------------------------------- */
+        Label usersHeader = header("ACTIVE USERS");
+        rightBar.getChildren().addAll(usersHeader, activeUsersBox, new Separator());
+
+        /* 4) COMMENTS -------------------------------------------------- */
+        Label commentsHeader = header("COMMENTS");
+        rightBar.getChildren().addAll(commentsHeader, commentsBox);
+
+        /* ---------- put panes in BorderPane --------------------------- */
         root.setTop(sessionBar);
         root.setCenter(centerBox);
         root.setRight(rightBar);
 
-        overlayPane.setMouseTransparent(true); // Allow clicks to pass through
-        overlayPane.setStyle("-fx-background-color: transparent;");
+        /* overlay for remote cursors / comments */
+        overlayPane.setMouseTransparent(true);
         overlayPane.prefWidthProperty().bind(textArea.widthProperty());
         overlayPane.prefHeightProperty().bind(textArea.heightProperty());
-
-        // Add to root (make sure textArea is added first)
         root.getChildren().addAll(textArea, overlayPane);
     }
 
-    private void setupEventHandlers() {
+    /* small helper to create section headers */
+    private Label header(String text) {
+        Label h = new Label(text);
+        h.setStyle("-fx-font-size:12px;-fx-font-weight:bold;-fx-text-fill:#6C757D;");
+        return h;
+    }
 
+    /* helper to build a white boxed container */
+    private VBox boxed(Node... nodes) {
+        VBox b = new VBox(5, nodes);
+        b.setStyle("-fx-background-color:white;-fx-padding:10px;"
+                + "-fx-border-color:#DEE2E6;-fx-border-radius:5px;");
+        return b;
+    }
+
+    private void setupEventHandlers() {
+        commentBtn.setOnAction(e -> {
+            IndexRange sel = textArea.getSelection();
+            if (sel.getLength() == 0) {
+                statusLabel.setText("Select some text first");
+                statusLabel.setStyle("-fx-text-fill: orange;");
+                return;
+            }
+
+            // Create comment input dialog
+            Dialog<String> dialog = new Dialog<>();
+            dialog.setTitle("Add Comment");
+            dialog.setHeaderText("Write your comment for the selected text");
+
+            // Set up buttons
+            ButtonType okButton = new ButtonType("OK", ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().addAll(okButton, ButtonType.CANCEL);
+
+            // Create text area for comment input
+            TextArea commentInput = new TextArea();
+            commentInput.setPromptText("Enter your comment here...");
+            commentInput.setWrapText(true);
+            commentInput.setPrefRowCount(4);
+
+            dialog.getDialogPane().setContent(commentInput);
+
+            // Convert result to string when OK is clicked
+            dialog.setResultConverter(dialogButton -> {
+                if (dialogButton == okButton) {
+                    return commentInput.getText();
+                }
+                return null;
+            });
+
+            // Show dialog and handle result
+            Optional<String> result = dialog.showAndWait();
+            result.ifPresent(commentText -> {
+                Color pick = Color.web(getColorForUser(userId));
+                String hex = String.format("#%02X%02X%02X",
+                        (int)(pick.getRed()*255),
+                        (int)(pick.getGreen()*255),
+                        (int)(pick.getBlue()*255));
+
+                AddCommentRequest req = new AddCommentRequest(
+                        userId,
+                        sel.getStart(),
+                        sel.getEnd(),
+                        hex,
+                        commentText  // Add the comment text to the request
+                );
+
+                sendMessage("/app/document/" + docId + "/comment/add", req);
+            });
+        });
         backBtn.setOnAction(e -> {
             if (stompClient != null) {
                 ConnectRequest req = new ConnectRequest(userId, isEditor);
@@ -435,34 +500,14 @@ public class CollabSessionController {
                             json.get("crdtDocument").get("activeUsers").asText(),
                             json.get("crdtDocument").get("text").asText(),
                             mapper.convertValue(json.get("crdtDocument").get("allCursors"),
-                                    new TypeReference<List<CursorPosition>>() {})
+                                    new TypeReference<List<CursorPosition>>() {}),
+                            mapper.convertValue(json.get("crdtDocument").get("comments"),
+                                    new TypeReference<List<CommentPosition>>() {})
                     )
             );
             this.editorCode = json.get("editorCode").asText();
             this.viewerCode = json.get("viewerCode").asText();
-
-            System.out.println("====== DocumentResponse Debug Info ======");
-            System.out.println("ID: " + json.get("id").asText());
-            System.out.println("Title: " + json.get("title").asText());
-            System.out.println("Owner ID: " + json.get("ownerId").asText());
-            System.out.println("Created At: " + json.get("createdAt").asText());
-            System.out.println("Updated At: " + json.get("updatedAt").asText());
-            System.out.println("Editor Code: " + json.get("editorCode").asText());
-            System.out.println("Viewer Code: " + json.get("viewerCode").asText());
-            System.out.println("Status: " + json.get("status").asText());
-
             JsonNode crdtNode = json.get("crdtDocument");
-            System.out.println("---- CRDT Document ----");
-            System.out.println("Active Users: " + crdtNode.get("activeUsers").asText());
-            System.out.println("Text: " + crdtNode.get("text").asText());
-
-
-            System.out.println("All Cursors:");
-            for (JsonNode cursorNode : crdtNode.get("allCursors")) {
-                System.out.println("  Cursor => userId: " + cursorNode.get("userId").asText() +
-                        ", position: " + cursorNode.get("position").asInt());
-            }
-            System.out.println("=========================================");
             Platform.runLater(() -> {
                 System.out.println("[DEBUG] Updating UI on JavaFX thread");
 
@@ -470,14 +515,14 @@ public class CollabSessionController {
                 textArea.setText(docResponse.getCrdtDocument().getText());
 
                 // Update document metadata
-                documentTitle = docResponse.getTitle();
-                documentCreator = docResponse.getOwnerId();
-                lastModified = docResponse.getUpdatedAt();
+                docTitleLabel.setText(documentTitle);
+                docCreatorLabel.setText("Creator: " + documentCreator);
+                docModifiedLabel.setText("Modified: " + lastModified);;
 
                 // Update UI with document info
                 docInfoLabel.setText(documentTitle);
 
-                VBox docMetadataBox = (VBox) rightBar.getChildren().get(7);
+                VBox docMetadataBox = (VBox) rightBar.getChildren().get(4);
                 ((Label) docMetadataBox.getChildren().get(0)).setText(documentTitle);
                 ((Label) docMetadataBox.getChildren().get(1)).setText("Creator: " + documentCreator);
                 ((Label) docMetadataBox.getChildren().get(2)).setText("Modified: " + lastModified);
@@ -495,7 +540,7 @@ public class CollabSessionController {
                     cursorColors.clear();
                     activeUsers.clear();
 
-                    // Process each cursor from the response
+                    // Process eacht cursor from the response
                     for (CursorPosition cursor : docResponse.getCrdtDocument().getAllCursors()) {
                         String userId = cursor.getUserId();
                         remoteCursors.put(userId, cursor.getPosition());
@@ -506,8 +551,12 @@ public class CollabSessionController {
                     // Visualize the cursors
                     visualizeRemoteCursors();
                 }
-
-                // Connect to WebSocket for real-time collaboration
+                comments.clear();
+                for (CommentPosition cp : docResponse.getCrdtDocument().getAllComments()) {
+                    comments.put(cp.getId(), cp);
+                }
+                updateCommentsUI();
+                visualizeComments();
                 System.out.println("[DEBUG] Attempting to connect to session...");
                 connectToSession();
             });
@@ -675,11 +724,9 @@ public class CollabSessionController {
                         isApplyingRemoteUpdate = true; // Prevent triggering the listener
                         int caretPosition = textArea.getCaretPosition();
                         textArea.setText(resp.getText());
-                        // Restore cursor position if possible
                         if (caretPosition <= resp.getText().length()) {
                             textArea.positionCaret(caretPosition);
                         } else {
-                            // If the document is now shorter, place cursor at the end
                             textArea.positionCaret(resp.getText().length());
                         }
 
@@ -953,39 +1000,148 @@ public class CollabSessionController {
                 (int)(color.getBlue() * 255));
     }
 
-    public boolean isApplyingRemoteUpdate() {
-        return isApplyingRemoteUpdate;
+    /* remove old rectangles (tagged via setUserData) and draw new ones */
+    private void visualizeComments() {
+
+        overlayPane.getChildren().removeIf(n -> "comment".equals(n.getUserData()));
+
+        double charW  = computeAverageCharWidth(textArea.getFont());
+        double lineH  = computeLineHeight(textArea.getFont());
+        Insets pad    = textArea.getPadding();
+
+        for (CommentPosition cp : comments.values()) {
+
+            int start = cp.getStartPos();
+            int end   = cp.getEndPos();          // inclusive
+
+            // walk line by line so that multi-line comments get multiple rects
+            int current = start;
+            while (current < end) {
+
+                int rowStart = current;
+                int row = getLineOfPosition(current);
+
+                // how many chars left in this *visual* line?
+                int colsPerLine = (int) Math.floor(
+                        (textArea.getWidth() - pad.getLeft() - pad.getRight() - 2) / charW);
+
+                int col = (rowStart);
+                for (int i = rowStart - 1; i >= 0 && textArea.getText().charAt(i) != '\n'; i--) {
+                    col--;                                   // count back to col 0
+                }
+                int spaceInRow = colsPerLine - col;
+                int len = Math.min(spaceInRow, end - current);
+
+                double x = pad.getLeft() + col * charW;
+                double y = pad.getTop() + row * lineH - textArea.getScrollTop();
+                double w = len * charW;
+                double h = lineH;
+
+                Rectangle rect = new Rectangle(w, h, Color.web(cp.getColor(), 0.3));
+                rect.setLayoutX(x+26);
+                rect.setLayoutY(y+90);
+                rect.setMouseTransparent(true);
+                rect.setUserData("comment");                 // tag for later removal
+                overlayPane.getChildren().add(rect);
+
+                current += len;
+                if (len == spaceInRow) current++;            // skip explicit '\n'
+            }
+        }
+    }
+    /* refresh the sidebar list of comments */
+    private void updateCommentsUI() {
+        commentsBox.getChildren().clear();
+
+        for (CommentPosition cp : comments.values()) {
+            HBox row = new HBox(8);
+            row.setAlignment(Pos.CENTER_LEFT);
+            row.setStyle("-fx-background-radius: 5px; -fx-padding: 5px;");
+            row.setOnMouseEntered(e -> row.setStyle("-fx-background-color: #f0f0f0;"));
+            row.setOnMouseExited(e -> row.setStyle(""));
+
+            // Smaller color indicator
+            Region colorDot = new Region();
+            colorDot.setPrefSize(8, 8); // Reduced from 12x12
+            colorDot.setMinSize(8, 8);
+            colorDot.setMaxSize(8, 8);
+            colorDot.setStyle("-fx-background-color: " + cp.getColor() + "; -fx-background-radius: 4px;");
+
+            // Comment text
+            VBox textBox = new VBox(2);
+            Label userLabel = new Label("User " + cp.getUserId());
+            userLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #444; -fx-font-size: 12px;");
+
+            // Truncated comment preview
+            Label commentLabel = new Label(truncateText(cp.getText(), 30));
+            commentLabel.setWrapText(true);
+            commentLabel.setMaxWidth(200);
+            commentLabel.setStyle("-fx-text-fill: #666; -fx-font-size: 12px;");
+
+            textBox.getChildren().addAll(userLabel, commentLabel);
+
+            // Click handler to show detail window
+            row.setOnMouseClicked(e -> showCommentDetailDialog(cp));
+
+            row.getChildren().addAll(colorDot, textBox);
+            commentsBox.getChildren().add(row);
+        }
     }
 
-    public void setApplyingRemoteUpdate(boolean applyingRemoteUpdate) {
-        isApplyingRemoteUpdate = applyingRemoteUpdate;
+    private void showCommentDetailDialog(CommentPosition comment) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Comment Details");
+
+        // Create dialog content
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(15));
+
+        // Color indicator
+        Region colorIndicator = new Region();
+        colorIndicator.setPrefSize(16, 16);
+        colorIndicator.setStyle("-fx-background-color: " + comment.getColor() + "; -fx-background-radius: 8px;");
+
+        // User info
+        HBox userInfo = new HBox(10, colorIndicator, new Label("User: " + comment.getUserId()));
+        userInfo.setAlignment(Pos.CENTER_LEFT);
+
+        // Comment text
+        TextArea commentText = new TextArea(comment.getText());
+        commentText.setEditable(false);
+        commentText.setWrapText(true);
+        commentText.setPrefRowCount(4);
+
+        // Date/time (if available in your CommentPosition class)
+        // Label dateLabel = new Label("Posted: " + comment.getTimestamp());
+
+        content.getChildren().addAll(
+                userInfo,
+                new Separator(),
+                commentText
+                // Add dateLabel here if available
+        );
+
+        // Close button
+        ButtonType closeButton = new ButtonType("Close", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().add(closeButton);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
     }
 
-    public boolean isApplyingRemoteCursor() {
-        return isApplyingRemoteCursor;
+    private String truncateText(String text, int maxLength) {
+        if (text.length() <= maxLength) return text;
+        return text.substring(0, maxLength) + "...";
     }
 
-    public void setApplyingRemoteCursor(boolean applyingRemoteCursor) {
-        isApplyingRemoteCursor = applyingRemoteCursor;
+    /* helper – count '\n' before index */
+    private int getLineOfPosition(int index) {
+        String txt = textArea.getText();
+        int line = 0;
+        for (int i = 0; i < index && i < txt.length(); i++) {
+            if (txt.charAt(i) == '\n') line++;
+        }
+        return line;
     }
 
-
-    private static class UserListResponse {
-        private java.util.List<UserInfo> users;
-
-        public java.util.List<UserInfo> getUsers() { return users; }
-        public void setUsers(java.util.List<UserInfo> users) { this.users = users; }
-    }
-
-
-    private static class UserInfo {
-        private String userId;
-        private String color;
-
-        public String getUserId() { return userId; }
-        public void setUserId(String userId) { this.userId = userId; }
-
-        public String getColor() { return color; }
-        public void setColor(String color) { this.color = color; }
-    }
 }

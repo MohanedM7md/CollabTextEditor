@@ -2,8 +2,8 @@ package com.example.server.CRDT;
 
 import com.example.server.CRDT.operations.*;
 import com.example.server.dto.responses.DocumentStateResponse;
+import com.example.server.model.CommentPosition;
 import com.example.server.model.CursorPosition;
-
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -16,7 +16,7 @@ public class CRDTDocument {
     private final Set<String> activeUsers;
     private final Set<String> editors;
     private final Set<String> viewers;
-
+    private final Map<String, CommentPosition> comments = new ConcurrentHashMap<>();
 
     public CRDTDocument(String documentId, String userId) {
         this.documentId = documentId;
@@ -107,11 +107,6 @@ public class CRDTDocument {
         }
     }
 
-    public void applyComment(List<CharItem> items, String comment) {
-        for (CharItem item : items) {
-            item.setComment(comment);
-        }
-    }
 
     public void applyHighlight(List<CharItem> items, String color) {
         for (CharItem item : items) {
@@ -259,10 +254,6 @@ public class CRDTDocument {
         history.add(op);
         userHistoryPointers.put(userId, history.size() - 1);
     }
-    public void removeComment(int startPos, int endPos,String userId) {
-        List<CharItem> affectedItems = getItemsInRange(startPos, endPos);
-        applyOperation(new RemoveCommentOperation(affectedItems ,userId));
-    }
 
     public void removeHighlight(int startPos, int endPos, String userId) {
         List<CharItem> affectedItems = getItemsInRange(startPos, endPos);
@@ -322,10 +313,43 @@ public class CRDTDocument {
 
 
 
-    public String getActiveUsers() {
-        return activeUsers.toString();
+    /* ---------- comment management ----------------------------------- */
+    public void removeComment(String commentId, String userId) {
+
+        CommentPosition c = comments.get(commentId);
+        if (c == null) return;                 // nothing to remove
+
+        applyOperation(new RemoveCommentOperation(userId,c));
+    }
+    public void addComment(int startPos, int endPos,
+                           String color, String userId,String text) {
+        if (startPos < 0 || endPos > getText().length() || endPos <= startPos) {
+            throw new IllegalArgumentException("comment range is invalid");
+        }
+        final String uniqueId = UUID.randomUUID().toString();
+        CommentPosition comment = new CommentPosition(
+                uniqueId,
+                userId,
+                color,
+                startPos,
+                endPos,
+                text);
+        applyOperation(new AddCommentOperation(comment, userId));
+    }
+    public void applyAddComment(CommentPosition comment) {
+        comments.put(comment.getId(), comment);
+    }
+    public void applyRemoveComment(CommentPosition comment) {
+        comments.remove(comment.getId());
     }
 
+
+    public Collection<CommentPosition> getComments() {
+        return comments.values();
+    }
+    public Collection<String> getActiveUsers() {
+        return activeUsers;
+    }
     private static class CharItemComparator implements Comparator<CharItem> {
         @Override
         public int compare(CharItem a, CharItem b) {
@@ -353,20 +377,6 @@ public class CRDTDocument {
         return cursors.values();
     }
 
-    // User presence
-    public void userConnected(String userId) {
-        activeUsers.add(userId);
-    }
-
-    public void userDisconnected(String userId) {
-        activeUsers.remove(userId);
-        cursors.remove(userId);
-    }
-
-    /**
-     * Converts a client position (visible text) to CRDT position (including deleted
-     * items)
-     */
     public synchronized int clientToCrdtPosition(int clientPos) {
         if (clientPos < 0)
             return 0;
@@ -386,28 +396,6 @@ public class CRDTDocument {
         return crdtPos;
     }
 
-    /**
-     * Converts a CRDT position to client position
-     */
-    public synchronized int crdtToClientPosition(int crdtPos) {
-        if (crdtPos < 0)
-            return 0;
-
-        int clientPos = 0;
-        int currentPos = 0;
-
-        for (CharItem item : items.keySet()) {
-            if (currentPos >= crdtPos) {
-                return clientPos;
-            }
-            if (!item.isDeleted()) {
-                clientPos++;
-            }
-            currentPos++;
-        }
-        return clientPos;
-    }
-
     public boolean canEdit(String userId) {
         return editors.contains(userId);
     }
@@ -419,6 +407,7 @@ public class CRDTDocument {
         return new DocumentStateResponse(
                 getText(),
                 getAllCursors(),
+                getComments(),
                 operationType,
                 triggeringUser
         );
