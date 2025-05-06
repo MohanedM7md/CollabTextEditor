@@ -100,14 +100,30 @@ public class CollaborationStompClient {
     }
 
     public void safeDisconnect(String destination, Object disconnectPayload) {
-        if (stompSession != null && stompSession.isConnected()) {
+        if (stompSession != null) {
+            if (stompSession.isConnected()) {
+                try {
+                    // Send leave message
+                    stompSession.send(destination, disconnectPayload);
+                    // Allow some time for the message to be sent
+                    Thread.sleep(200); // optional small delay (e.g., 200ms)
+                } catch (Exception e) {
+                    System.err.println("Error sending disconnect payload: " + e.getMessage());
+                }
+            }
 
-            stompSession.send(destination, disconnectPayload);
-
-        } else if (stompSession != null) {
-            stompSession.disconnect();
+            // Now disconnect regardless
+            try {
+                stompSession.disconnect();
+                System.out.println("[WebSocket] Disconnected from server.");
+            } catch (Exception e) {
+                System.err.println("Error during disconnect: " + e.getMessage());
+            } finally {
+                stompSession = null; // Clean up reference
+            }
         }
     }
+
 
 
 

@@ -87,9 +87,5 @@ public class DocumentController {
         }
     }
 
-    private String generateRandomCode() {
-        return UUID.randomUUID().toString().substring(0, 6);
-    }
-
 
 }

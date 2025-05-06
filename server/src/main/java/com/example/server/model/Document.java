@@ -45,27 +45,17 @@ public class Document {
     public boolean canEdit(String userId) {
        return this.crdtDocument.canEdit(userId);
     }
-
     public boolean canView(String userId) {
         return this.crdtDocument.canView(userId)|| canEdit(userId);
     }
     public void addEditor(String id) {
         this.crdtDocument.addEditor(id);
     }
-
     public void addViewer(String id) {
         this.crdtDocument.addViewer(id);
     }
     public void updateTimestamp() {
         this.updatedAt = LocalDateTime.now();
-    }
-    public void exportToTextFile(File file) throws IOException {
-        if (crdtDocument == null) {
-            throw new IllegalStateException("No CRDT document to export.");
-        }
-        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
-            writer.write(crdtDocument.getText());
-        }
     }
 
     public void importFromString(String content, String userId) throws IOException {

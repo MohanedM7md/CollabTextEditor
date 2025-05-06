@@ -723,6 +723,27 @@ public class CollabSessionController {
                         updateActiveUsers(request.getUserId(),color,false);
                         remoteCursors.remove(request.getUserId());
                         cursorColors.remove(request.getUserId());
+
+                        if (remoteCursors.remove(userId) != null) {
+                            System.out.println("  ✔ Removed from remoteCursors");
+                        } else {
+                            System.out.println("  ✘ Not found in remoteCursors");
+                        }
+
+                        if (cursorColors.remove(userId) != null) {
+                            System.out.println("  ✔ Removed from cursorColors");
+                        } else {
+                            System.out.println("  ✘ Not found in cursorColors");
+                        }
+
+                        Rectangle indicator = cursorIndicators.remove(userId);
+                        if (indicator != null) {
+                            overlayPane.getChildren().remove(indicator);
+                            System.out.println("  ✔ Cursor indicator removed from overlay");
+                        } else {
+                            System.out.println("  ✘ No cursor indicator found in cursorIndicators");
+                        }
+                        visualizeRemoteCursors();
                     }
                 });
             }
@@ -767,81 +788,103 @@ public class CollabSessionController {
     }
 
     private void visualizeRemoteCursors() {
-        System.out.println("[VISUALIZE] Updating cursor indicators");
 
-        // Clear existing indicators for users who disconnected
-        Set<String> currentUsers = new HashSet<>(remoteCursors.keySet());
-        cursorIndicators.keySet().removeIf(userId -> !currentUsers.contains(userId));
+        // remove indicators of users that are gone
 
-        // Get text metrics
-        Font font = textArea.getFont();
-        Text helperText = new Text();
-        helperText.setFont(font);
-
-        // Calculate exact line height
-        helperText.setText("X");
-        double lineHeight = helperText.getLayoutBounds().getHeight() * 1.2; // Add some spacing
-
-        // Calculate average character width
-        double charWidth = computeAverageCharWidth(font);
-
-        // Get text area layout information
-        Insets padding = textArea.getPadding();
-        double startY = padding.getTop();
-
-        // Update or create indicators for active users
-        for (Map.Entry<String, Integer> entry : remoteCursors.entrySet()) {
-            String userId = entry.getKey();
-            int position = entry.getValue();
-            String color = cursorColors.getOrDefault(userId, "#FF0000");
-
-            if (!userId.equals(this.userId)) {
-                // Calculate screen position from text position
-                Point2D location = estimateCursorPosition(position, charWidth, lineHeight, startY);
-
-                // Get or create the indicator
-                Rectangle indicator = cursorIndicators.computeIfAbsent(userId, k -> {
-                    Rectangle circle = new Rectangle(2, 20);
-                    circle.setMouseTransparent(true);
-                    overlayPane.getChildren().add(circle);
-                    return circle;
-                });
-
-                // Update indicator properties
-                indicator.setFill(Color.web(color));
-                indicator.setLayoutX(location.getX()+25);
-                indicator.setLayoutY(location.getY() +70);
-
-                System.out.printf("  User %s: pos=%d, x=%.1f, y=%.1f%n",
-                        userId, position, location.getX(), location.getY());
+        Iterator<String> it = cursorIndicators.keySet().iterator();
+        while (it.hasNext()) {
+            String id = it.next();
+            if (!remoteCursors.containsKey(id)) {
+                Rectangle indicator = cursorIndicators.get(id);
+                if (indicator != null) {
+                    // Make it visually disappear
+                    indicator.setWidth(0);
+                    indicator.setHeight(0);
+                    // Optionally, remove it from the overlayPane now or later
+                    overlayPane.getChildren().remove(indicator);
+                }
+                it.remove(); // Now remove from the map
             }
         }
+
+
+        for (Map.Entry<String,Integer> e : remoteCursors.entrySet()) {
+
+            String uid   = e.getKey();
+            int    pos   = e.getValue();
+
+            if (uid.equals(this.userId)) continue; // skip own caret
+
+            Point2D loc = estimateCursorPosition(pos);
+
+            Rectangle r = cursorIndicators.computeIfAbsent(uid, k -> {
+                Rectangle rect = new Rectangle(2, computeLineHeight(textArea.getFont()));
+                rect.setMouseTransparent(true);
+                overlayPane.getChildren().add(rect);
+                return rect;
+            });
+
+            r.setFill(Color.web(cursorColors.getOrDefault(uid,"#ff0000")));
+            r.setLayoutX(loc.getX());
+            r.setLayoutY(loc.getY());
+        }
     }
 
-    private Point2D estimateCursorPosition(int textPosition, double charWidth, double lineHeight, double startY) {
-        String text = textArea.getText();
-        if (textPosition > text.length()) {
-            textPosition = text.length();
+    private Point2D estimateCursorPosition(int index) {
+
+        String txt = textArea.getText();
+        index = Math.min(index, txt.length());
+
+        Font   font       = textArea.getFont();
+        double charW      = computeAverageCharWidth(font);
+        double lineH      = computeLineHeight(font);
+
+        // How many “columns” fit into the current visible width?
+        Insets padding    = textArea.getPadding();
+        double usableW    = textArea.getWidth()
+                - padding.getLeft() - padding.getRight() - 2; // 2px safety
+        int maxColsPerRow = (int) Math.max(1, Math.floor(usableW / charW)) -1;
+
+        int row = 0;
+        int col = 1;
+
+    /* Walk through the text once up to the requested index and do a
+       manual word-wrap counting.  That is fast enough for typical
+       document sizes (< 100 k). */
+        for (int i = 0; i < index; i++) {
+            char c = txt.charAt(i);
+
+            if (c == '\n') {          // explicit line break
+                row++;                // new physical line
+                col = 1;
+            } else {
+                col++;
+                if (col >= maxColsPerRow) {   // automatic wrap
+                    row++;
+                    col = 1;
+                }
+            }
         }
 
-        // Calculate row and column
-        String textBefore = text.substring(0, textPosition);
-        String[] lines = textBefore.split("\n", -1);
-        int row = lines.length - 1;
-        int column = textPosition - (textBefore.lastIndexOf('\n') + 1);
+        double localX = padding.getLeft() + col * charW;
+        double localY = padding.getTop()  + row * lineH+6;
 
-        // Calculate position with proper padding
-        double x = column * charWidth + textArea.getPadding().getLeft() + 2; // Small offset
-        double y = startY + (row * lineHeight) + (lineHeight * 0.8); // Position near baseline
-
-        return new Point2D(x, y);
+        Point2D pScene  = textArea.localToScene(localX, localY);
+        return overlayPane.sceneToLocal(pScene);
     }
 
+
+    private double computeLineHeight(Font font) {
+        Text t = new Text("X");
+        t.setFont(font);
+        return t.getLayoutBounds().getHeight()+4.8;
+    }
+
+
     private double computeAverageCharWidth(Font font) {
-        // Compute approximate character width
-        Text sampleText = new Text("X"); // Use 'X' as average width proxy
-        sampleText.setFont(font);
-        return sampleText.getLayoutBounds().getWidth();
+        Text t = new Text("X");
+        t.setFont(font);
+        return t.getLayoutBounds().getWidth();
     }
 
 
