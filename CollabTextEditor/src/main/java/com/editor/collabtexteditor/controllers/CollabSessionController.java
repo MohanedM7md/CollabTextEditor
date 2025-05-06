@@ -724,16 +724,22 @@ public class CollabSessionController {
                         isApplyingRemoteUpdate = true; // Prevent triggering the listener
                         int caretPosition = textArea.getCaretPosition();
                         textArea.setText(resp.getText());
-                        if (caretPosition <= resp.getText().length()) {
-                            textArea.positionCaret(caretPosition);
-                        } else {
-                            textArea.positionCaret(resp.getText().length());
-                        }
-
+                        textArea.positionCaret(Math.min(caretPosition, resp.getText().length()));
                         isApplyingRemoteUpdate = false; // Re-enable the listener
                     }
+                    // Update comments from response
+                    comments.clear();
+                    if (resp.getComments() != null) {
+                        for (CommentPosition cp : resp.getComments()) {
+                            comments.put(cp.getId(), cp);
+                        }
+                    }
+
                     visualizeRemoteCursors();
+                    visualizeComments();  // Add this line
+                    updateCommentsUI();   // Add this line
                 });
+
             }else if (msg.contains("\"userId\"") && msg.contains("\"position\"")) {
                 CursorResponse resp = objectMapper.readValue(msg, CursorResponse.class);
                 System.out.println("[CURSOR] Received cursor update:");
@@ -1038,7 +1044,10 @@ public class CollabSessionController {
                 double h = lineH;
 
                 Rectangle rect = new Rectangle(w, h, Color.web(cp.getColor(), 0.3));
-                rect.setLayoutX(x+26);
+                if(getLineStart(cp.getStartPos()) != 0)
+                    rect.setLayoutX(30 + getLineStart(cp.getStartPos())*charW);
+                else
+                    rect.setLayoutX(36 + getLineStart(cp.getStartPos())*charW);
                 rect.setLayoutY(y+90);
                 rect.setMouseTransparent(true);
                 rect.setUserData("comment");                 // tag for later removal
@@ -1143,5 +1152,19 @@ public class CollabSessionController {
         }
         return line;
     }
+    private int getLineStart(int position) {
+        String text = textArea.getText();
+        System.out.println("getLineStart: " + position);
+        int start = 0;
+        for (int i = 0; i < position && i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                start = 0;
+            }
+            start++;
+        }
+        System.out.println("endStart: " + start);
+        return start;
+    }
+
 
 }
