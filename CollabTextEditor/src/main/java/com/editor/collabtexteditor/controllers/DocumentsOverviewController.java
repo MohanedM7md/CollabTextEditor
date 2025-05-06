@@ -498,9 +498,9 @@ public class DocumentsOverviewController {
         writer.append("Content-Disposition: form-data; name=\"file\"; filename=\"").append(file.getName()).append("\"\r\n");
         writer.append("Content-Type: text/plain\r\n\r\n");
         writer.flush();
+        writer.append("\r\n");
 
         Files.copy(file.toPath(), byteArrayOutputStream);
-        writer.append("\r\n");
 
         // End boundary
         writer.append("--").append(BOUNDARY).append("--\r\n");

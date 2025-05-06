@@ -17,6 +17,7 @@ public class CRDTDocument {
     private final Set<String> editors;
     private final Set<String> viewers;
     private final Map<String, CommentPosition> comments = new ConcurrentHashMap<>();
+    private boolean enableHistory = true;
 
     public CRDTDocument(String documentId, String userId) {
         this.documentId = documentId;
@@ -87,7 +88,33 @@ public class CRDTDocument {
         }
         return sb.toString();
     }
+    public void setHistoryEnabled(boolean enabled) {
+        this.enableHistory = enabled;
+    }
 
+    // Modified version of insert for bulk operations
+    public synchronized void insertBulk(char value, int crdtPosition, String userId) {
+        if (!editors.contains(userId)) {
+            throw new IllegalStateException("User doesn't have edit permissions");
+        }
+
+        CharItem newItem = createItemAtPositionBulk(value, crdtPosition, userId);
+        items.put(newItem, null); // Direct insert without operation tracking
+    }
+
+    // Optimized path generation
+    private CharItem createItemAtPositionBulk(char value, int position, String userId) {
+        if (items.isEmpty()) {
+            return new CharItem(value, userId,0, List.of(0));
+        }
+
+        CharItem lastItem = items.lastKey();
+        List<Integer> newPath = new ArrayList<>(lastItem.getPath());
+        int lastIdx = newPath.size() - 1;
+        newPath.set(lastIdx, newPath.get(lastIdx) + 1);
+
+        return new CharItem(value, userId,0, newPath);
+    }
     // Operation application (package-private for operations)
     public  void applyInsert(CharItem item) {
         items.put(item, null);

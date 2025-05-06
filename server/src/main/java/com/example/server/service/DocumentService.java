@@ -60,7 +60,7 @@ public class DocumentService {
                 .collect(Collectors.toList());
     }
     public Document importDocument(String ownerId, String title, String editorCode,
-                                   String viewerCode, String content ) throws IOException {
+                                   String viewerCode, String content ) throws IOException, InterruptedException {
         // Create new document
         Document doc = new Document(ownerId, editorCode, viewerCode, title);
         doc.importFromString(content,ownerId);

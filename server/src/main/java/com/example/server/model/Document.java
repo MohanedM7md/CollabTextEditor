@@ -7,9 +7,7 @@ import lombok.Setter;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Getter @Setter
 public class Document {
@@ -29,13 +27,13 @@ public class Document {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public Document(String ownerId, String editorCode ,String viewerCode,String title) {
+    public Document(String ownerId, String editorCode, String viewerCode, String title) {
         this();
         this.ownerId = ownerId;
         this.crdtDocument = new CRDTDocument(id, ownerId);
         this.editorCode = editorCode;
         this.viewerCode = viewerCode;
-        this.title=title;
+        this.title = title;
     }
 
     public enum DocumentStatus {
@@ -43,17 +41,21 @@ public class Document {
     }
 
     public boolean canEdit(String userId) {
-       return this.crdtDocument.canEdit(userId);
+        return this.crdtDocument.canEdit(userId);
     }
+
     public boolean canView(String userId) {
-        return this.crdtDocument.canView(userId)|| canEdit(userId);
+        return this.crdtDocument.canView(userId) || canEdit(userId);
     }
+
     public void addEditor(String id) {
         this.crdtDocument.addEditor(id);
     }
+
     public void addViewer(String id) {
         this.crdtDocument.addViewer(id);
     }
+
     public void updateTimestamp() {
         this.updatedAt = LocalDateTime.now();
     }
@@ -63,11 +65,20 @@ public class Document {
             throw new IllegalArgumentException("Content cannot be null");
         }
 
-        // Process each character in the string
-        for (int i = 0; i < content.length(); i++) {
-            char c = content.charAt(i);
-            crdtDocument.insert(c, crdtDocument.getText().length(), userId);
+        // Get reference to your CRDTDocument instance
+        CRDTDocument doc = this.crdtDocument; // or however you access it
+
+        try {
+            doc.setHistoryEnabled(false); // Disable history tracking
+
+            for (int i = 0; i < content.length(); i++) {
+                // Use bulk insert with calculated CRDT position
+
+                char c = content.charAt(i);
+                doc.insertBulk(c, i, userId);
+            }
+        } finally {
+            doc.setHistoryEnabled(true); // Restore history tracking
         }
     }
-    
 }
