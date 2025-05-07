@@ -828,7 +828,8 @@ public class CollabSessionController {
 
                 // Username label (show "You" for current user)
 
-                String displayName = id.equals(this.userId) ? "You" : "User " + id.substring(0, 3);
+                String displayName = id.equals(this.userId) ? "You" : "User " + id.substring(0, 3)
+                        + " line: "+ getVisualLineOfPosition(remoteCursors.get(id));
                 Label nameLabel = new Label(displayName);
                 if (id.equals(this.userId)) {
                     nameLabel.setStyle("-fx-font-weight: bold;");
@@ -838,6 +839,35 @@ public class CollabSessionController {
                 activeUsersBox.getChildren().add(userRow);
             });
         });
+    }
+    private int getVisualLineOfPosition(int index) {
+        String txt = textArea.getText();
+        index = Math.min(index, txt.length());
+
+        Font font = textArea.getFont();
+        double charW = computeAverageCharWidth(font);
+        Insets padding = textArea.getPadding();
+        double usableW = textArea.getWidth() - padding.getLeft() - padding.getRight() - 2;
+        int maxColsPerRow = (int) Math.max(1, Math.floor(usableW / charW)) - 1;
+
+        int row = 0;
+        int col = 1;
+
+        for (int i = 0; i < index; i++) {
+            char c = txt.charAt(i);
+            if (c == '\n') {
+                row++;
+                col = 1;
+            } else {
+                col++;
+                if (col >= maxColsPerRow) {
+                    row++;
+                    col = 1;
+                }
+            }
+        }
+
+        return row;
     }
 
     private void visualizeRemoteCursors() {
@@ -898,8 +928,8 @@ public class CollabSessionController {
                 - padding.getLeft() - padding.getRight() - 2; // 2px safety
         int maxColsPerRow = (int) Math.max(1, Math.floor(usableW / charW)) -1;
 
-        int row = 0;
-        int col = 1;
+        double row = 0;
+        double col = 1;
 
     /* Walk through the text once up to the requested index and do a
        manual word-wrap counting.  That is fast enough for typical
@@ -908,12 +938,12 @@ public class CollabSessionController {
             char c = txt.charAt(i);
 
             if (c == '\n') {          // explicit line break
-                row++;                // new physical line
+                row += 1.06;                // new physical line
                 col = 1;
             } else {
                 col++;
                 if (col >= maxColsPerRow) {   // automatic wrap
-                    row++;
+                    row+=1.06;
                     col = 1;
                 }
             }
