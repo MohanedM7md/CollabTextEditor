@@ -1,33 +1,73 @@
 package com.example.server.CRDT;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.TreeMap;
-import java.util.Comparator;
+import com.example.server.CRDT.operations.*;
+import com.example.server.dto.responses.DocumentStateResponse;
+import com.example.server.model.CommentPosition;
+import com.example.server.model.CursorPosition;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class CRDTDocument {
-    public final TreeMap<CharItem, Void> items;
-    private final List<Operation> operationHistory;
-    private int historyPointer;
-    private final String localUserId;
+    private final TreeMap<CharItem, Void> items;
+    private final Map<String, List<Operation>> userOperationHistory = new ConcurrentHashMap<>();
+    private final Map<String, Integer> userHistoryPointers = new ConcurrentHashMap<>();
+    private final String documentId;
+    private final Map<String, CursorPosition> cursors;
+    private final Set<String> activeUsers;
+    private final Set<String> editors;
+    private final Set<String> viewers;
+    private final Map<String, CommentPosition> comments = new ConcurrentHashMap<>();
+    private boolean enableHistory = true;
 
-    public CRDTDocument(String userId) {
-        this.localUserId = userId;
+    public CRDTDocument(String documentId, String userId) {
+        this.documentId = documentId;
         this.items = new TreeMap<>(new CharItemComparator());
-        this.operationHistory = new ArrayList<>();
-        this.historyPointer = -1;
+        this.cursors = new ConcurrentHashMap<>();
+        this.activeUsers = ConcurrentHashMap.newKeySet();
+        this.editors = ConcurrentHashMap.newKeySet();
+        this.viewers = ConcurrentHashMap.newKeySet();
+        this.activeUsers.add(userId);
+        this.editors.add(userId);
     }
 
-    // Document modification methods
-    public void insert(char value, int position) {
-        CharItem newItem = createItemAtPosition(value, position);
-        applyOperation(new InsertOperation(newItem));
+
+    public synchronized void insert(char value, int clientPosition, String userId) throws IllegalStateException {
+        if (!editors.contains(userId)) {
+            throw new IllegalStateException("User doesn't have edit permissions");
+        }
+
+        int crdtPosition = clientToCrdtPosition(clientPosition);
+
+        if (crdtPosition < 0 || crdtPosition > items.size()) {
+            throw new IndexOutOfBoundsException("Invalid insert position");
+        }
+        System.out.println("Inserting '" + value + "' at client position " + clientPosition +
+                " (CRDT position " + crdtPosition + ")");
+        CharItem newItem = createItemAtPosition(value, crdtPosition, userId);
+        applyOperation(new InsertOperation(newItem, userId));
     }
 
-    public void delete(int position) {
-        if (position < 0 || position >= items.size()) return;
-        CharItem item = getItemAtPosition(position);
-        applyOperation(new DeleteOperation(item));
+    public synchronized void delete(int clientPosition, String userId) throws IllegalStateException {
+        if (!editors.contains(userId)) {
+            throw new IllegalStateException("User doesn't have edit permissions");
+        }
+        // Convert client position to CRDT position
+        int crdtPosition = clientToCrdtPosition(clientPosition);
+
+        if (crdtPosition < 0 || crdtPosition >= items.size())
+            return;
+
+        CharItem item = getItemAtPosition(crdtPosition);
+        if (!item.isDeleted()) {
+            applyOperation(new DeleteOperation(item, userId));
+        }
+        int deletedCharGlobalPos = clientPosition;
+        updateCommentsOnDelete(deletedCharGlobalPos);
+    }
+
+    public synchronized void addHighlight(int startPos, int endPos, String color, String userId) throws IllegalStateException {
+        List<CharItem> affectedItems = getItemsInRange(startPos, endPos);
+        applyOperation(new HighlightOperation(affectedItems, color,userId));
     }
 
     // Methods to safely access document state
@@ -49,133 +89,313 @@ public class CRDTDocument {
         }
         return sb.toString();
     }
+    public void setHistoryEnabled(boolean enabled) {
+        this.enableHistory = enabled;
+    }
 
+    // Modified version of insert for bulk operations
+    public synchronized void insertBulk(char value, int crdtPosition, String userId) {
+        if (!editors.contains(userId)) {
+            throw new IllegalStateException("User doesn't have edit permissions");
+        }
+
+        CharItem newItem = createItemAtPositionBulk(value, crdtPosition, userId);
+        items.put(newItem, null); // Direct insert without operation tracking
+    }
+
+    // Optimized path generation
+    private CharItem createItemAtPositionBulk(char value, int position, String userId) {
+        if (items.isEmpty()) {
+            return new CharItem(value, userId,0, List.of(0));
+        }
+
+        CharItem lastItem = items.lastKey();
+        List<Integer> newPath = new ArrayList<>(lastItem.getPath());
+        int lastIdx = newPath.size() - 1;
+        newPath.set(lastIdx, newPath.get(lastIdx) + 1);
+
+        return new CharItem(value, userId,0, newPath);
+    }
     // Operation application (package-private for operations)
-    void applyInsert(CharItem item) {
+    public  void applyInsert(CharItem item) {
         items.put(item, null);
     }
 
-    void applyDelete(CharItem item) {
+    public  void applyDelete(CharItem item) {
         CharItem existing = items.floorKey(item);
         if (existing != null && existing.equals(item)) {
             existing.setDeleted(true);
         }
     }
 
-    void applyUndelete(CharItem item) {
+    public void applyUndelete(CharItem item) {
         CharItem existing = items.floorKey(item);
         if (existing != null && existing.equals(item)) {
             existing.setDeleted(false);
         }
     }
 
-    void applyComment(List<CharItem> items, String comment) {
-        for (CharItem item : items) {
-            item.setComment(comment);
-        }
-    }
 
-    void applyHighlight(List<CharItem> items, String color) {
+    public void applyHighlight(List<CharItem> items, String color) {
         for (CharItem item : items) {
             item.setColor(color);
         }
     }
+    // User management methods
+    public void addEditor(String userId) {
+        editors.add(userId);
+        viewers.remove(userId);
+    }
+
+    public void addViewer(String userId) {
+        viewers.add(userId);
+        editors.remove(userId);
+    }
+
+    public void removeUser(String userId) {
+        editors.remove(userId);
+        viewers.remove(userId);
+        activeUsers.remove(userId);
+        cursors.remove(userId);
+    }
 
     // Private helper methods
-    private CharItem createItemAtPosition(char value, int position) {
+    // Private helper methods
+    private CharItem createItemAtPosition(char value, int position, String userId) {
         List<CharItem> itemList = new ArrayList<>(items.keySet());
+        System.out.println("\n[createItemAtPosition] Starting insertion of '" + value +
+                "' at position " + position + " by user " + userId);
+        System.out.println("Current document items: " + itemList);
 
         if (itemList.isEmpty()) {
-            CharItem newItem = new CharItem(value, localUserId);
+            System.out.println("Document is empty - creating first character with path [0]");
+            CharItem newItem = new CharItem(value, userId);
             newItem.setPath(List.of(0));
             return newItem;
         }
 
-        if (position <= 0) {
-            return createItemBefore(value, itemList.get(0));
+        // Adjust position if needed
+        int originalPosition = position;
+        while (position > 0 && position < itemList.size() &&
+                items.comparator().compare(getItemAtPosition(position), getItemAtPosition(position - 1)) <= 0) {
+            position--;
+        }
+        if (originalPosition != position) {
+            System.out.println("Adjusted position from " + originalPosition + " to " + position +
+                    " due to ordering constraints");
         }
 
+        // Special case: insert at the beginning
+        if (position == 0) {
+            System.out.println("Inserting at beginning (before " + itemList.getFirst() + ")");
+            return createItemAtZero(value, itemList.getFirst(), userId);
+        }
+
+        // Special case: insert at the end
         if (position >= itemList.size()) {
-            return createItemAfter(value, itemList.get(itemList.size()-1));
+            System.out.println("Inserting at end (after " + itemList.getLast() + ")");
+            return createItemAfter(value, itemList.getLast(), userId);
         }
 
-        return createItemBetween(value, itemList.get(position-1), itemList.get(position));
+        // Insert between two items
+        CharItem before = itemList.get(position - 1);
+        CharItem after = itemList.get(position);
+        System.out.println("Inserting between " + before + " and " + after);
+        return createItemBetween(value, before, after, userId);
     }
 
-    private CharItem createItemBefore(char value, CharItem existing) {
+    private CharItem createItemBefore(char value, CharItem existing, String userId) {
+        System.out.println("[createItemBefore] Creating '" + value + "' before " + existing);
         List<Integer> newPath = new ArrayList<>(existing.getPath());
         int lastIdx = newPath.size() - 1;
         newPath.set(lastIdx, newPath.get(lastIdx) + 1);
 
-        CharItem newItem = new CharItem(value, localUserId);
+        CharItem newItem = new CharItem(value, userId);
         newItem.setPath(newPath);
+        System.out.println("Created item: " + newItem + " with path " + newPath);
         return newItem;
     }
 
-    private CharItem createItemAfter(char value, CharItem existing) {
+    private CharItem createItemAfter(char value, CharItem existing, String userId) {
+        System.out.println("[createItemAfter] Creating '" + value + "' after " + existing);
         List<Integer> newPath = new ArrayList<>(existing.getPath());
         newPath.add(0);
 
-        CharItem newItem = new CharItem(value, localUserId);
+        CharItem newItem = new CharItem(value, userId);
         newItem.setPath(newPath);
+        System.out.println("Created item: " + newItem + " with path " + newPath);
         return newItem;
     }
 
-    private CharItem createItemBetween(char value, CharItem before, CharItem after) {
+    private CharItem createItemBetween(char value, CharItem before, CharItem after, String userId) {
+        System.out.println("[createItemBetween] Creating '" + value + "' between " +
+                before + " and " + after);
+        List<Integer> myTest = new ArrayList<>(after.getPath());
         List<Integer> childPath = new ArrayList<>(before.getPath());
-        childPath.add(0);
+        childPath.add(myTest.getLast() - 1); // Start with max value
         CharItem testItem = new CharItem('x', "test", 0, childPath);
 
-        if (items.comparator().compare(testItem, after) < 0) {
-            CharItem newItem = new CharItem(value, localUserId);
+        System.out.println("Testing if path " + childPath + " would sort correctly");
+        int comparison = items.comparator().compare(testItem, after);
+        System.out.println("Comparison result: " + comparison +
+                " (negative means valid position)");
+
+        if (comparison < 0) {
+            CharItem newItem = new CharItem(value, userId);
             newItem.setPath(childPath);
+            System.out.println("Valid between position - created item: " + newItem);
             return newItem;
         } else {
-            return createItemBefore(value, after);
+            System.out.println("Path would not sort correctly - falling back to createItemBefore");
+            return createItemBefore(value, after, userId);
         }
     }
 
-    private void applyOperation(Operation op) {
+    private CharItem createItemAtZero(char value, CharItem existing, String userId) {
+        System.out.println("[createItemAtZero] Creating '" + value + "' before " + existing);
+        List<Integer> newPath = new ArrayList<>(existing.getPath());
+
+        int lastIdx = newPath.size() - 1;
+        newPath.set(lastIdx, newPath.get(lastIdx) - 1);
+
+        CharItem newItem = new CharItem(value, userId);
+        newItem.setPath(newPath);
+        System.out.println("Created item: " + newItem + " with path " + newPath);
+        return newItem;
+    }
+
+    public void applyOperation(Operation op) {
+        String userId = op.getUserId();
+
+        // Initialize history for new users
+        userOperationHistory.putIfAbsent(userId, new ArrayList<>());
+        userHistoryPointers.putIfAbsent(userId, -1);
         op.apply(this);
-        if (historyPointer < operationHistory.size() - 1) {
-            operationHistory.subList(historyPointer + 1, operationHistory.size()).clear();
+        List<Operation> history = userOperationHistory.get(userId);
+        int pointer = userHistoryPointers.get(userId);
+
+        if (pointer < history.size() - 1) {
+            history.subList(pointer + 1, history.size()).clear();
         }
-        operationHistory.add(op);
-        historyPointer = operationHistory.size() - 1;
-    }
-    public void removeComment(int startPos, int endPos) {
-        List<CharItem> affectedItems = getItemsInRange(startPos, endPos);
-        applyOperation(new RemoveCommentOperation(affectedItems));
+
+        // Add to history and update pointer
+        history.add(op);
+        userHistoryPointers.put(userId, history.size() - 1);
     }
 
-    public void removeHighlight(int startPos, int endPos) {
+    public void removeHighlight(int startPos, int endPos, String userId) {
         List<CharItem> affectedItems = getItemsInRange(startPos, endPos);
-        applyOperation(new RemoveHighlightOperation(affectedItems));
+        applyOperation(new RemoveHighlightOperation(affectedItems, userId));
     }
 
-    public void undo() {
-        if (historyPointer < 0) {
-            System.out.println("Nothing to undo");
+    public void undo(String userId) {
+        if (!userOperationHistory.containsKey(userId) ||
+                userHistoryPointers.get(userId) < 0) {
+            System.out.println("Nothing to undo for user " + userId);
             return;
         }
 
-        Operation op = operationHistory.get(historyPointer);
+        List<Operation> history = userOperationHistory.get(userId);
+        int pointer = userHistoryPointers.get(userId);
+
+        Operation op = history.get(pointer);
         Operation inverse = op.getInverse();
-        inverse.apply(this);
-        historyPointer--;
-        System.out.println("Undo: " + op.getClass().getSimpleName());
+
+        if (inverse != null) {
+            inverse.apply(this);
+            userHistoryPointers.put(userId, pointer - 1);
+            System.out.println("Undo: " + op.getClass().getSimpleName() +
+                    " for user " + userId);
+        }
     }
 
-    public void redo() {
-        if (historyPointer >= operationHistory.size() - 1) {
-            System.out.println("Nothing to redo");
+    public void redo(String userId) {
+        if (!userOperationHistory.containsKey(userId)) {
+            System.out.println("No history for user " + userId);
             return;
         }
 
-        historyPointer++;
-        Operation op = operationHistory.get(historyPointer);
-        op.apply(this);
-        System.out.println("Redo: " + op.getClass().getSimpleName());
+        List<Operation> history = userOperationHistory.get(userId);
+        int pointer = userHistoryPointers.getOrDefault(userId, -1);
+
+        // Check if redo is possible
+        if (pointer + 1 >= history.size()) {
+            System.out.println("Nothing to redo for user " + userId);
+            return;
+        }
+
+        // Redo the next operation in history
+        Operation op = history.get(pointer + 1);
+
+        // Here we get the inverse of the inverse (i.e., the original operation)
+        Operation redoOp = op.getInverse() != null ? op.getInverse().getInverse() : null;
+
+        if (redoOp != null) {
+            redoOp.apply(this);
+            userHistoryPointers.put(userId, pointer + 1);
+            System.out.println("Redo: " + redoOp.getClass().getSimpleName() + " for user " + userId);
+        } else {
+            System.out.println("Cannot redo: inverse operation not available.");
+        }
+    }
+
+
+
+    /* ---------- comment management ----------------------------------- */
+    public void removeComment(String commentId, String userId) {
+
+        CommentPosition c = comments.get(commentId);
+        if (c == null) return;                 // nothing to remove
+
+        applyOperation(new RemoveCommentOperation(userId,c));
+    }
+    public void addComment(int startPos, int endPos,
+                           String color, String userId,String text) {
+        if (startPos < 0 || endPos > getText().length() || endPos <= startPos) {
+            throw new IllegalArgumentException("comment range is invalid");
+        }
+        final String uniqueId = UUID.randomUUID().toString();
+        CommentPosition comment = new CommentPosition(
+                uniqueId,
+                userId,
+                color,
+                startPos,
+                endPos,
+                text);
+        applyOperation(new AddCommentOperation(comment, userId));
+    }
+    public void applyAddComment(CommentPosition comment) {
+        comments.put(comment.getId(), comment);
+    }
+    public void applyRemoveComment(CommentPosition comment) {
+        comments.remove(comment.getId());
+    }
+
+    private void updateCommentsOnDelete(int deletedPos) {
+        List<String> toRemove = new ArrayList<>();
+
+        for (Map.Entry<String, CommentPosition> entry : comments.entrySet()) {
+            CommentPosition comment = entry.getValue();
+            int start = comment.getStartPos();
+            int end = comment.getEndPos();
+
+            // Check if the deleted character is within the comment range
+            if (deletedPos >= start && deletedPos < end) {
+                toRemove.add(comment.getId());
+            }
+        }
+
+        for (String commentId : toRemove) {
+            removeComment(commentId, "system");  // Use "system" or actual userId if you prefer
+        }
+    }
+
+
+    public Collection<CommentPosition> getComments() {
+        return comments.values();
+    }
+    public Collection<String> getActiveUsers() {
+        return activeUsers;
     }
     private static class CharItemComparator implements Comparator<CharItem> {
         @Override
@@ -192,6 +412,52 @@ public class CRDTDocument {
             if (userCmp != 0) return userCmp;
             return Long.compare(a.getTimestamp(), b.getTimestamp());
         }
+    }
+
+    // Cursor management
+    public void updateCursor(String userId, int position, String color) {
+        if (!activeUsers.contains(userId)) return;
+        cursors.put(userId, new CursorPosition(userId, position, color));
+    }
+
+    public Collection<CursorPosition> getAllCursors() {
+        return cursors.values();
+    }
+
+    public synchronized int clientToCrdtPosition(int clientPos) {
+        if (clientPos < 0)
+            return 0;
+
+        int visibleCount = 0;
+        int crdtPos = 0;
+
+        for (CharItem item : items.keySet()) {
+            if (visibleCount >= clientPos) {
+                return crdtPos;
+            }
+            if (!item.isDeleted()) {
+                visibleCount++;
+            }
+            crdtPos++;
+        }
+        return crdtPos;
+    }
+
+    public boolean canEdit(String userId) {
+        return editors.contains(userId);
+    }
+
+    public boolean canView(String userId) {
+        return viewers.contains(userId);
+    }
+    public DocumentStateResponse getCurrentState(String operationType, String triggeringUser) {
+        return new DocumentStateResponse(
+                getText(),
+                getAllCursors(),
+                getComments(),
+                operationType,
+                triggeringUser
+        );
     }
 
 }
