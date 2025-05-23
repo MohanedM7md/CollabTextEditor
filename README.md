@@ -2,6 +2,8 @@
 
 A real-time collaborative plain text editor built as a college project using **Spring Boot** and **JavaFX**. It allows multiple users to edit the same document simultaneously with features like live updates, user roles, and conflict-free changes.
 
+![Screenshot of the project](https://raw.githubusercontent.com/MohanedM7md/CollabTextEditor/refs/heads/main/CollabTextEditor/src/main/resources/com/editor/collabtexteditor/Editor.png)
+
 ## Features
 - Real-time collaborative editing
 - User roles: editor/viewer
